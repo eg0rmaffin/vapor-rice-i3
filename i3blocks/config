@@ -1,0 +1,29 @@
+# i3blocks vaporwave edition ✨
+[time]
+command=date '+%H:%M 🕒'
+interval=60
+color=#ff79c6
+
+[date]
+command=date '+%A, %d %b'
+interval=60
+color=#8be9fd
+
+[battery]
+command=acpi | cut -d "," -f 2-
+interval=30
+color=#f1fa8c
+
+[brightness]
+command=light -G | cut -d '.' -f 1 && echo "%"
+interval=10
+color=#50fa7b
+
+[network]
+command=nmcli -t -f active,ssid dev wifi | grep yes | cut -d ':' -f 2
+interval=10
+color=#bd93f9
+
+[layout]
+command=~/dotfiles/i3blocks/layout
+interval=1

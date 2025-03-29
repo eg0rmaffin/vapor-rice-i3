@@ -1,0 +1,4 @@
+#!/bin/bash
+
+layout=$(xkb-switch) # Если установлен xkb-switch
+echo "$layout"
