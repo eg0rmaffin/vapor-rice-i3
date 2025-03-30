@@ -28,7 +28,7 @@ LOG=$(mktemp)
 if makepkg -si --noconfirm >"$LOG" 2>&1; then
   echo "✅ Установилось без патчей."
 else
-  echo "⚠️ Сборка упала, пытаемся определить cmake_policy..."
+  echo "⚠️ Сборка упала, пытаемся определить CMake версию..."
 
   # 🔍 Находим путь к CMakeLists.txt
   CMAKE_FILE=$(find . -type f -name "CMakeLists.txt" | head -n 1)
@@ -38,18 +38,21 @@ else
     exit 1
   fi
 
-  # 🧠 Пытаемся вытащить существующую строку cmake_policy
-  POLICY_LINE=$(grep -oE 'cmake_policy\(VERSION [0-9]+\.[0-9]+\)' "$CMAKE_FILE" || true)
+  # 🧠 Ищем строку cmake_policy или cmake_minimum_required
+  POLICY_LINE=$(grep -E 'cmake_(minimum_required|policy)\(VERSION [0-9]+\.[0-9]+\)' "$CMAKE_FILE" || true)
 
   if [ -z "$POLICY_LINE" ]; then
-    # 📦 Извлекаем нужную версию cmake_policy из ошибки
-    ERROR_LINE=$(grep -m1 'cmake_policy' "$LOG" || true)
+    # ⚠️ Ничего не найдено — берём версию из лога
+    ERROR_LINE=$(grep -m1 'cmake' "$LOG" || true)
     POLICY_VERSION=$(echo "$ERROR_LINE" | grep -oE '[0-9]+\.[0-9]+' || echo "3.5")
 
-    echo "🔧 Патчим CMakeLists.txt → cmake_policy(VERSION $POLICY_VERSION)"
+    echo "🔧 Вставляем cmake_policy(VERSION $POLICY_VERSION) в начало $CMAKE_FILE"
     sed -i "1i cmake_policy(VERSION $POLICY_VERSION)" "$CMAKE_FILE"
   else
-    echo "ℹ️ Уже есть строка политики: $POLICY_LINE"
+    POLICY_VERSION=$(echo "$POLICY_LINE" | grep -oE '[0-9]+\.[0-9]+')
+    echo "ℹ️ Обнаружено: $POLICY_LINE"
+    echo "🔁 Заменяем на cmake_policy(VERSION $POLICY_VERSION)"
+    sed -i "s/$POLICY_LINE/cmake_policy(VERSION $POLICY_VERSION)/" "$CMAKE_FILE"
   fi
 
   echo "🔁 Повторная сборка с патчем..."
