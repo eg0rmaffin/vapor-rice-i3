@@ -10,6 +10,13 @@ fi
 
 TMP_DIR="/tmp/$PACKAGE"
 echo "📦 Клонируем AUR: $PACKAGE → $TMP_DIR"
+
+# 🔥 Удалим временную папку, если осталась после сбоя
+if [ -d "$TMP_DIR" ]; then
+  echo "🧹 Старый каталог $TMP_DIR найден, удаляем..."
+  rm -rf "$TMP_DIR"
+fi
+
 git clone "https://aur.archlinux.org/$PACKAGE.git" "$TMP_DIR"
 
 pushd "$TMP_DIR" > /dev/null
