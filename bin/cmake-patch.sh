@@ -11,7 +11,7 @@ TMP_DIR="/tmp/$PACKAGE"
 echo "📦 Клонируем AUR: $PACKAGE → $TMP_DIR"
 
 if [ -d "$TMP_DIR" ]; then
-  echo "🧹 Старый каталог $TMP_DIR найден, удаляем..."
+  echo "🧹 Удаляем старый каталог $TMP_DIR..."
   rm -rf "$TMP_DIR"
 fi
 
@@ -32,23 +32,23 @@ else
     exit 1
   fi
 
-  echo "🔍 Ищем строку cmake_minimum_required в $CMAKE_FILE"
-  CURRENT_LINE=$(grep -E 'cmake_minimum_required\(VERSION [0-9]+\.[0-9]+\)' "$CMAKE_FILE" || true)
-  echo "   Найдено: $CURRENT_LINE"
+  echo "🔍 Ищем строку cmake_minimum_required..."
+  CURRENT_VERSION=$(grep -Po 'cmake_minimum_required\s*\(\s*VERSION\s*\K[0-9]+\.[0-9]+' "$CMAKE_FILE" || true)
+  echo "🔢 Найдено: $CURRENT_VERSION"
 
   ERROR_LINE=$(grep -m1 'Compatibility with CMake' "$LOG" || true)
   POLICY_VERSION=$(echo "$ERROR_LINE" | grep -oE '[0-9]+\.[0-9]+' | tail -n1 || echo "3.25")
-  echo "🔧 Требуемая версия по логу: $POLICY_VERSION"
+  echo "🔧 Требуемая версия: $POLICY_VERSION"
 
-  if [ -n "$CURRENT_LINE" ]; then
-    echo "🔁 Заменяем строку на cmake_minimum_required(VERSION $POLICY_VERSION)"
-    sed -i "s|$CURRENT_LINE|cmake_minimum_required(VERSION $POLICY_VERSION)|" "$CMAKE_FILE"
+  if [ -n "$CURRENT_VERSION" ]; then
+    echo "🔁 Обновляем cmake_minimum_required до $POLICY_VERSION"
+    sed -i -E "s/(cmake_minimum_required\s*\(\s*VERSION\s*)$CURRENT_VERSION/\1$POLICY_VERSION/" "$CMAKE_FILE"
   else
-    echo "📌 Вставляем новую строку в начало"
+    echo "📌 Вставляем строку cmake_minimum_required в начало"
     sed -i "1i cmake_minimum_required(VERSION $POLICY_VERSION)" "$CMAKE_FILE"
   fi
 
-  echo "🔁 Повторная сборка с патчем..."
+  echo "🔁 Повторная сборка..."
   makepkg -si --noconfirm
 fi
 
