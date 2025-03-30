@@ -80,13 +80,15 @@ aur_pkgs=(
 
 for pkg in "${aur_pkgs[@]}"; do
     if ! yay -Q "$pkg" &>/dev/null; then
-        echo -e "${YELLOW}📦 Installing $pkg from AUR...${RESET}"
-        yay -S --noconfirm "$pkg"
+        echo -e "${YELLOW}📦 Trying to install $pkg from AUR (with fallback patch)...${RESET}"
+        if ! yay -S --noconfirm "$pkg"; then
+            echo -e "${CYAN}⚠️  Standard install failed — trying cmake patch for $pkg...${RESET}"
+            ~/dotfiles/bin/cmake-patch.sh "$pkg"
+        fi
     else
         echo -e "${GREEN}✅ $pkg already installed${RESET}"
     fi
 done
-
 
 
 # ─────────────────────────────────────────────
