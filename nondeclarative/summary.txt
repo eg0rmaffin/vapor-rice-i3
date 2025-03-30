@@ -1,0 +1,16 @@
+almost minimal arch:
+amd-ucode 20250311.b69d4b74-3
+base 3-2
+efibootmgr 18-3
+git 2.49.0-1
+grub 2:2.12.r226.g56ccc5ed-1
+linux 6.13.8.arch1-1
+linux-firmware 20250311.b69d4b74-3
+mkinitcpio 39.2-3
+networkmanager 1.52.0-1
+openssh 9.9p2-1
+os-prober 1.83-1
+sudo 1.9.16.p2-2
+vim 9.1.1236-1
+summary:
+13
