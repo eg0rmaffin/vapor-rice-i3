@@ -4,9 +4,8 @@ if [ -n "$TOUCHPAD_ID" ]; then
     xinput set-prop "$TOUCHPAD_ID" "libinput Natural Scrolling Enabled" 1
 fi
 
-#export GTK_THEME=Adwaita-dark
 export GTK_THEME=catppuccin-mocha-mauve-standard+default
-export XCURSOR_THEME=Catppuccin-Mocha-Cursors
-#export BASH_ENV="$HOME/.bashrc_i3"
+export GTK_ICON_THEME=Chicago95
+
 export PATH="$HOME/.local/bin:$PATH"
 exec i3 -c "$HOME/.config/i3/config"

@@ -35,6 +35,13 @@ deps=(
 	noto-fonts-cjk
 	noto-fonts-emoji
 	noto-fonts-extra
+	neofetch
+	thunar
+	thunar-archive-plugin
+	thunar-volman
+	tumbler
+	gvfs
+	gvfs-mtp
 )
 
 for pkg in "${deps[@]}"; do
@@ -51,8 +58,7 @@ aur_pkgs=(
     xkb-switch
     light
     catppuccin-gtk-theme-mocha
-    catppuccin-cursors-mocha
-    catppuccin-icon-theme-mocha
+    chicago95-icon-theme
 )
 
 for pkg in "${aur_pkgs[@]}"; do
@@ -77,13 +83,22 @@ rm -rf ~/.config/i3
 mkdir -p ~/.config
 ln -s ~/dotfiles/i3 ~/.config/i3
 
-echo -e "${GREEN}✅ All symlinks created${RESET}"
+# 🧩 Bash config
+echo -e "${CYAN}🔧 Linking .bashrc...${RESET}"
+ln -sf ~/dotfiles/bash/.bashrc ~/.bashrc
+echo -e "${GREEN}✅ .bashrc linked${RESET}"
 
 # 🧩 Конфиг picom
 echo -e "${CYAN}🔧 Setting up picom...${RESET}"
 mkdir -p ~/.config/picom
 ln -sf ~/dotfiles/picom/picom.conf ~/.config/picom/picom.conf
 echo -e "${GREEN}✅ picom config linked${RESET}"
+
+# 🧩 GTK 3.0 settings
+echo -e "${CYAN}🔧 Linking GTK 3.0 settings...${RESET}"
+mkdir -p ~/.config/gtk-3.0
+ln -sf ~/dotfiles/gtk-3.0/settings.ini ~/.config/gtk-3.0/settings.ini
+echo -e "${GREEN}✅ GTK 3.0 settings linked${RESET}"
 
 # 🧩 Alacritty
 echo -e "${CYAN}🔧 Linking Alacritty config...${RESET}"
@@ -103,6 +118,7 @@ mkdir -p ~/.config/i3blocks
 ln -sf ~/dotfiles/i3blocks/config ~/.config/i3blocks/config
 echo -e "${GREEN}✅ i3blocks config linked${RESET}"
 
+echo -e "${GREEN}✅ All symlinks created${RESET}"
 # ─────────────────────────────────────────────
 # 🖼 Обои (только если в X сессии)
 if [ -n "$DISPLAY" ] && [ -f ~/dotfiles/wallpapers/default.jpg ]; then

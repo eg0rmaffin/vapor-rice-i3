@@ -13,6 +13,9 @@ bindsym $mod+d exec rofi -show drun
 # терминал
 bindsym $mod+Return exec --no-startup-id alacritty
 
+# 📁 Открыть файловый менеджер Thunar
+bindsym $mod+f exec --no-startup-id thunar
+
 # Kill focused window
 bindsym $mod+Shift+q kill
 
