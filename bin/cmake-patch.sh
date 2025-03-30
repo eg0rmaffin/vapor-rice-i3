@@ -11,7 +11,6 @@ fi
 TMP_DIR="/tmp/$PACKAGE"
 echo "📦 Клонируем AUR: $PACKAGE → $TMP_DIR"
 
-# 🔥 Удалим временную папку, если осталась после сбоя
 if [ -d "$TMP_DIR" ]; then
   echo "🧹 Старый каталог $TMP_DIR найден, удаляем..."
   rm -rf "$TMP_DIR"
@@ -22,38 +21,25 @@ git clone "https://aur.archlinux.org/$PACKAGE.git" "$TMP_DIR"
 pushd "$TMP_DIR" > /dev/null
 
 echo "🧪 Пробуем собрать без патчей..."
-
-# 🧾 Сохраняем вывод в лог, чтобы не запускать makepkg дважды
 LOG=$(mktemp)
+
 if makepkg -si --noconfirm >"$LOG" 2>&1; then
   echo "✅ Установилось без патчей."
 else
-  echo "⚠️ Сборка упала, пытаемся определить CMake версию..."
+  echo "⚠️ Сборка упала, анализируем..."
 
-  # 🔍 Находим путь к CMakeLists.txt
   CMAKE_FILE=$(find . -type f -name "CMakeLists.txt" | head -n 1)
-
   if [ -z "$CMAKE_FILE" ]; then
     echo "❌ Не найден CMakeLists.txt"
     exit 1
   fi
 
-  # 🧠 Ищем строку cmake_policy или cmake_minimum_required
-  POLICY_LINE=$(grep -E 'cmake_(minimum_required|policy)\(VERSION [0-9]+\.[0-9]+\)' "$CMAKE_FILE" || true)
+  # Пробуем вытащить рекомендуемую версию из вывода ошибки
+  ERROR_LINE=$(grep -m1 'Compatibility with CMake' "$LOG" || true)
+  POLICY_VERSION=$(echo "$ERROR_LINE" | grep -oE '[0-9]+\.[0-9]+' | tail -n1 || echo "3.25")
 
-  if [ -z "$POLICY_LINE" ]; then
-    # ⚠️ Ничего не найдено — берём версию из лога
-    ERROR_LINE=$(grep -m1 'cmake' "$LOG" || true)
-    POLICY_VERSION=$(echo "$ERROR_LINE" | grep -oE '[0-9]+\.[0-9]+' || echo "3.5")
-
-    echo "🔧 Вставляем cmake_policy(VERSION $POLICY_VERSION) в начало $CMAKE_FILE"
-    sed -i "1i cmake_policy(VERSION $POLICY_VERSION)" "$CMAKE_FILE"
-  else
-    POLICY_VERSION=$(echo "$POLICY_LINE" | grep -oE '[0-9]+\.[0-9]+')
-    echo "ℹ️ Обнаружено: $POLICY_LINE"
-    echo "🔁 Заменяем на cmake_policy(VERSION $POLICY_VERSION)"
-    sed -i "s/$POLICY_LINE/cmake_policy(VERSION $POLICY_VERSION)/" "$CMAKE_FILE"
-  fi
+  echo "🔧 Обновим CMakeLists.txt до cmake_minimum_required(VERSION $POLICY_VERSION)"
+  sed -i -E "s/cmake_minimum_required\(VERSION [0-9]+\.[0-9]+\)/cmake_minimum_required(VERSION $POLICY_VERSION)/" "$CMAKE_FILE"
 
   echo "🔁 Повторная сборка с патчем..."
   makepkg -si --noconfirm
