@@ -31,7 +31,7 @@ else
 
   # 🔙 Если не нашли — fallback на обычный поиск
   if [ -z "$CMAKE_FILE" ]; then
-    CMAKE_FILE=$(find . -type f -name "CMakeLists.txt" | head -n 1)
+    CMAKE_FILE=$(find ./src -type f -name "CMakeLists.txt" | head -n 1)
   fi
 
   if [ -z "$CMAKE_FILE" ]; then
