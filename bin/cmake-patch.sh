@@ -26,11 +26,20 @@ if makepkg -si --noconfirm >"$LOG" 2>&1; then
 else
   echo "⚠️ Сборка упала, анализируем..."
 
-  CMAKE_FILE=$(find . -type f -name "CMakeLists.txt" | head -n 1)
+  # 🧠 Пытаемся найти путь к CMakeLists.txt из ошибки cmake
+  CMAKE_FILE=$(grep -oE '[^ :]+/CMakeLists.txt' "$LOG" | head -n 1)
+
+  # 🔙 Если не нашли — fallback на обычный поиск
+  if [ -z "$CMAKE_FILE" ]; then
+    CMAKE_FILE=$(find . -type f -name "CMakeLists.txt" | head -n 1)
+  fi
+
   if [ -z "$CMAKE_FILE" ]; then
     echo "❌ Не найден CMakeLists.txt"
     exit 1
   fi
+
+  echo "📄 Используемый CMakeLists.txt: $CMAKE_FILE"
 
   echo "🔍 Ищем строку cmake_minimum_required..."
   CURRENT_VERSION=$(grep -Po 'cmake_minimum_required\s*\(\s*VERSION\s*\K[0-9]+\.[0-9]+' "$CMAKE_FILE" || true)
