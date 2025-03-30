@@ -15,24 +15,30 @@ git clone "https://aur.archlinux.org/$PACKAGE.git" "$TMP_DIR"
 pushd "$TMP_DIR" > /dev/null
 
 echo "🧪 Пробуем собрать без патчей..."
-if ! makepkg -si --noconfirm; then
-  echo "⚠️ Сборка провалилась. Пытаемся найти нужную версию cmake_policy..."
 
-  POLICY_LINE=$(grep -oE 'cmake_policy\(VERSION [0-9]+\.[0-9]+\)' CMakeLists.txt || true)
+# 🔧 ВАЖНО: сохраняем вывод в лог, чтобы не запускать makepkg дважды (иначе могут удалиться исходники!)
+LOG=$(mktemp)
+if makepkg -si --noconfirm > "$LOG" 2>&1; then
+  echo "✅ Установилось без патчей."
+else
+  echo "⚠️ Сборка упала, пытаемся определить cmake_policy..."
+
+  # 📝 Пытаемся вытащить уже существующую cmake_policy
+  POLICY_LINE=$(grep -oE 'cmake_policy\(VERSION [0-9]+\.[0-9]+' CMakeLists.txt || true)
+
   if [ -z "$POLICY_LINE" ]; then
-    ERROR_LINE=$(makepkg 2>&1 | grep -m1 'cmake_policy' || true)
+    # 🧠 Извлекаем нужную версию cmake_policy из вывода makepkg
+    ERROR_LINE=$(grep -m1 'cmake_policy' "$LOG" || true)
     POLICY_VERSION=$(echo "$ERROR_LINE" | grep -oE '[0-9]+\.[0-9]+' || echo "3.5")
 
-    echo "🔧 Вставляем cmake_policy(VERSION $POLICY_VERSION) в CMakeLists.txt"
+    echo "🔧 Патчим CMakeLists.txt → cmake_policy(VERSION $POLICY_VERSION)"
     sed -i "1i cmake_policy(VERSION $POLICY_VERSION)" CMakeLists.txt
   else
-    echo "ℹ️ В CMakeLists.txt уже есть строка политики: $POLICY_LINE"
+    echo "ℹ️ Уже есть строка политики: $POLICY_LINE"
   fi
 
   echo "🔁 Повторная сборка с патчем..."
   makepkg -si --noconfirm
-else
-  echo "✅ Пакет успешно установлен без патча."
 fi
 
 popd > /dev/null
