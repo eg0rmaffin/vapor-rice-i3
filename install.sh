@@ -19,6 +19,9 @@ echo -e "${RESET}"
 # ─────────────────────────────────────────────
 # 📦 Зависимости
 deps=(
+	xorg
+	xorg-xinit
+	base-devel
 	i3-gaps
 	i3blocks
 	alacritty
@@ -29,7 +32,6 @@ deps=(
 	flameshot
 	firefox
 	xclip
-	yay
 	pamixer
 	noto-fonts
 	noto-fonts-cjk
@@ -39,6 +41,8 @@ deps=(
 	thunar
 	thunar-archive-plugin
 	thunar-volman
+	dbus
+	polkit
 	tumbler
 	gvfs
 	gvfs-mtp
@@ -54,6 +58,19 @@ for pkg in "${deps[@]}"; do
 done
 
 #-------- AUR pacs ----------
+
+if ! command -v yay &>/dev/null; then
+    echo -e "${YELLOW}📦 yay не найден, клонируем и устанавливаем...${RESET}"
+    git clone https://aur.archlinux.org/yay.git /tmp/yay
+    pushd /tmp/yay > /dev/null
+    makepkg -si --noconfirm
+    popd > /dev/null
+    rm -rf /tmp/yay
+    echo -e "${GREEN}🧹 Временная папка /tmp/yay удалена${RESET}"
+else
+    echo -e "${GREEN}✅ yay уже установлен${RESET}"
+fi
+
 aur_pkgs=(
     xkb-switch
     light
