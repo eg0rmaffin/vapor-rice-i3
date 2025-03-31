@@ -24,7 +24,7 @@ if ! command -v reflector &>/dev/null; then
 fi
 
 echo -e "${CYAN}🌐 Обновляем зеркала с помощью reflector...${RESET}"
-sudo reflector --country Russia,Kazakhstan --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+sudo reflector --country Russia --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
 echo -e "${GREEN}✅ Зеркала обновлены${RESET}"
 
 
@@ -58,6 +58,7 @@ deps=(
 	tumbler
 	gvfs
 	gvfs-mtp
+	telegram-desktop
 )
 
 for pkg in "${deps[@]}"; do
@@ -202,6 +203,16 @@ sudo udevadm trigger --subsystem-match=backlight
 sudo usermod -aG video "$USER"
 
 echo -e "${GREEN}✅ Udev rule written to $UDEV_RULE${RESET}"
+
+
+# ─── 🌐 Локали ────────
+sudo sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+sudo sed -i 's/^#ru_RU.UTF-8 UTF-8/ru_RU.UTF-8 UTF-8/' /etc/locale.gen
+
+sudo locale-gen
+
+echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf
+echo 'KEYMAP=us' | sudo tee /etc/vconsole.conf
 
 # ─────────────────────────────────────────────
 

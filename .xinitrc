@@ -6,7 +6,13 @@ fi
 
 export GTK_THEME=catppuccin-mocha-mauve-standard+default
 export GTK_ICON_THEME=Chicago95
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
 
 export PATH="$HOME/.local/bin:$PATH"
 eval "$(dbus-launch --sh-syntax --exit-with-session)"
+
+# 🎹 Клавиатура
+setxkbmap -layout us,ru -option grp:alt_shift_toggle
+
 exec i3 -c "$HOME/.config/i3/config"

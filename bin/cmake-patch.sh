@@ -45,9 +45,21 @@ echo "📜 CMakeLists.txt после правки:"
 head -n 10 "$CMAKE_FILE"
 
 # 🚀 Повторная сборка с уже распакованным src
-echo "🚀 makepkg --noextract --noarchive -si"
-makepkg --noextract --noarchive -si
+echo "🚀 makepkg --noextract"
+makepkg --noextract --nocheck
+
+# 📦 Устанавливаем собранный пакет
+echo "📦 Ищем основной пакет (не debug)"
+PKG_FILE=$(find "$TMP_DIR" -type f -name "*.pkg.tar.*" | grep -v "debug" | head -n1)
+if [ -n "$PKG_FILE" ]; then
+    echo "📦 Устанавливаем пакет вручную: $PKG_FILE"
+    sudo pacman -U --noconfirm "$PKG_FILE"
+else
+    echo "❌ Не удалось найти собранный пакет в $TMP_DIR"
+    exit 1
+fi
 
 popd > /dev/null
 rm -rf "$TMP_DIR"
 echo "🧹 Удалили временную папку $TMP_DIR"
+pacman -Q xkb-switch && echo "✅ xkb-switch успешно установлен" || echo "❌ xkb-switch всё ещё не установлен"
