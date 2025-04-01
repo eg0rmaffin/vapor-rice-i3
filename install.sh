@@ -59,6 +59,16 @@ deps=(
 	gvfs
 	gvfs-mtp
 	telegram-desktop
+	fd
+	# Звуковая система
+    	pipewire
+    	pipewire-pulse
+    	pipewire-alsa
+    	wireplumber
+    	alsa-utils
+    	pamixer
+    	pavucontrol
+    	sof-firmware
 )
 
 for pkg in "${deps[@]}"; do
@@ -151,6 +161,7 @@ ln -sf ~/dotfiles/i3blocks/config ~/.config/i3blocks/config
 echo -e "${GREEN}✅ i3blocks config linked${RESET}"
 
 echo -e "${GREEN}✅ All symlinks created${RESET}"
+
 # ─────────────────────────────────────────────
 # 🖼 Обои (только если в X сессии)
 if [ -n "$DISPLAY" ] && [ -f ~/dotfiles/wallpapers/default.jpg ]; then
@@ -214,7 +225,23 @@ sudo locale-gen
 echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf
 echo 'KEYMAP=us' | sudo tee /etc/vconsole.conf
 
+
+# Активируем службы systemd для звука (после установки пакетов)
+echo -e "${CYAN}🔧 Активация служб PipeWire...${RESET}"
+for service in pipewire.service pipewire-pulse.service wireplumber.service; do
+    if systemctl --user list-unit-files | grep -q "$service"; then
+        systemctl --user enable "$service" 2>/dev/null || true
+        systemctl --user start "$service" 2>/dev/null || true
+        echo -e "${GREEN}✅ Служба $service настроена${RESET}"
+    else
+        echo -e "${YELLOW}⚠️ Служба $service не найдена, пропускаем${RESET}"
+    fi
+done
+
 # ─────────────────────────────────────────────
+
+source ~/dotfiles/audio_setup.sh
+audio_setup
 
 # 🎉 Финал
 echo -e "${GREEN}✅ All done! You can launch i3 with \`startx\` from tty 🎉${RESET}"
