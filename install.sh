@@ -238,6 +238,11 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
     fi
 done
 
+# ─── 🕰️ Настройка локального времени RTC ──────
+echo -e "${CYAN}🕰️ Настраиваем RTC в режиме localtime...${RESET}"
+sudo timedatectl set-local-rtc 1 --adjust-system-clock
+echo -e "${GREEN}✅ RTC теперь работает в localtime${RESET}"
+
 # ─────────────────────────────────────────────
 
 source ~/dotfiles/audio_setup.sh
