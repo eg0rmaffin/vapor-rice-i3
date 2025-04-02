@@ -60,6 +60,7 @@ deps=(
 	gvfs-mtp
 	telegram-desktop
 	fd
+	htop
 	# Звуковая система
     	pipewire
     	pipewire-pulse
@@ -245,7 +246,7 @@ echo -e "${GREEN}✅ RTC теперь работает в localtime${RESET}"
 
 # ─────────────────────────────────────────────
 
-source ~/dotfiles/audio_setup.sh
+source ~/dotfiles/scripts/audio_setup.sh
 audio_setup
 
 # 🎉 Финал
