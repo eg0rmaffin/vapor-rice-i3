@@ -31,7 +31,7 @@ echo -e "${GREEN}✅ Зеркала обновлены${RESET}"
 # ─────────────────────────────────────────────
 # 📦 Зависимости
 deps=(
-	xorg
+	xorg-server
 	xorg-xinit
 	base-devel
 	i3-gaps
@@ -197,20 +197,6 @@ if [ -n "$TOUCHPAD_ID" ]; then
     xinput set-prop "$TOUCHPAD_ID" "libinput Natural Scrolling Enabled" 1
 fi
 
-# 💡 Настройка прав на управление яркостью
-echo -e "${CYAN}🔧 Setting up backlight permissions...${RESET}"
-
-UDEV_RULE='/etc/udev/rules.d/90-backlight.rules'
-
-sudo tee "$UDEV_RULE" > /dev/null <<EOF
-SUBSYSTEM=="backlight", \
-  RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness", \
-  RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
-EOF
-
-sudo udevadm control --reload-rules
-sudo udevadm trigger --subsystem-match=backlight
-
 # Добавим пользователя в группу video
 sudo usermod -aG video "$USER"
 
@@ -248,6 +234,15 @@ echo -e "${GREEN}✅ RTC теперь работает в localtime${RESET}"
 
 source ~/dotfiles/scripts/audio_setup.sh
 audio_setup
+
+source ~/dotfiles/scripts/detect_hardware.sh
+install_drivers
+
+source ~/dotfiles/scripts/laptop_power.sh
+setup_power_management
+
+source ~/dotfiles/scripts/hardware_config.sh
+configure_hardware
 
 # 🎉 Финал
 echo -e "${GREEN}✅ All done! You can launch i3 with \`startx\` from tty 🎉${RESET}"

@@ -94,11 +94,11 @@ client.urgent           #ff5555 #ff5555 #ffffff #ff5555 #ff5555
 
 assign [class="vaporwave"] 10
 for_window [class="vaporwave"] \
-    floating enable, \
-    border none, \
-    sticky disable, \
-    focus off, \
-    move to workspace 10, \
+    floating enable \
+    border none \
+    sticky disable \
+    focus off \
+    move to workspace 10 \
     move position center \
 
 workspace 10 output HDMI-1
@@ -114,3 +114,4 @@ include ~/dotfiles/i3/includes/audio.conf
 # Автоматическое определение и настройка аудио-клавиш
 exec_always --no-startup-id ~/dotfiles/bin/detect-audio-keys.sh
 
+include $HOME/.config/i3/includes/multimedia.conf
