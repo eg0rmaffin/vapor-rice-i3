@@ -7,6 +7,19 @@ YELLOW="\033[1;33m"
 CYAN="\033[0;36m"
 RESET="\033[0m"
 
+detect_hybrid_graphics() {
+    # Определяем наличие гибридной графики
+    local intel_gpu=$(lspci | grep -i 'vga\|3d\|display' | grep -i 'intel')
+    local amd_gpu=$(lspci | grep -i 'vga\|3d\|display' | grep -i 'amd\|ati\|radeon')
+    local nvidia_gpu=$(lspci | grep -i 'vga\|3d\|display' | grep -i 'nvidia')
+    
+    if [[ -n "$intel_gpu" && (-n "$amd_gpu" || -n "$nvidia_gpu") ]]; then
+        return 0  # Гибридная графика обнаружена
+    else
+        return 1  # Нет гибридной графики
+    fi
+}
+
 create_xorg_config() {
     echo -e "${CYAN}🔧 Создаем конфигурацию Xorg для определенного оборудования...${RESET}"
 
@@ -15,7 +28,14 @@ create_xorg_config() {
         sudo mkdir -p "$XORG_CONF_DIR"
     fi
 
-    # Intel GPU
+    # Проверяем, есть ли гибридная графика
+    if detect_hybrid_graphics; then
+        echo -e "${YELLOW}⚠️ Обнаружена гибридная графика. Автоматическая конфигурация отключена.${RESET}"
+        echo -e "${YELLOW}⚠️ Рекомендуется ручная настройка Xorg для избежания конфликтов.${RESET}"
+        return
+    fi
+
+    # Intel GPU (только если нет гибридной графики)
     if lspci | grep -i 'vga\|3d\|display' | grep -i 'intel' &>/dev/null; then
         INTEL_CONF="$XORG_CONF_DIR/20-intel.conf"
         if [ ! -f "$INTEL_CONF" ]; then
@@ -40,7 +60,7 @@ EOF
         echo -e "${YELLOW}⚠️ Обнаружена NVIDIA GPU. Автоматическая конфигурация NVIDIA отключена.${RESET}"
     fi
 
-    # AMD GPU
+    # AMD GPU (только если нет гибридной графики)
     if lspci | grep -i 'vga\|3d\|display' | grep -i 'amd\|ati\|radeon' &>/dev/null; then
         AMD_CONF="$XORG_CONF_DIR/20-amdgpu.conf"
         if [ ! -f "$AMD_CONF" ]; then
@@ -88,12 +108,41 @@ EOF
     fi
 }
 
-# Функция для настройки гибридной графики – оставляем только предупреждение
+# Функция для настройки гибридной графики
 setup_hybrid_graphics() {
-    if lspci | grep -i 'vga\|3d\|display' | grep -i 'intel' &>/dev/null && \
-       lspci | grep -i 'vga\|3d\|display' | grep -i 'nvidia' &>/dev/null; then
-        echo -e "${YELLOW}⚠️ Обнаружена гибридная графика Intel + NVIDIA. Автоматическая настройка гибридной графики отключена.${RESET}"
-        echo -e "${YELLOW}Используйте manual configuration для NVIDIA или отключите дискретную карту.${RESET}"
+    if detect_hybrid_graphics; then
+        echo -e "${YELLOW}⚠️ Обнаружена гибридная графика. Автоматическая настройка гибридной графики отключена.${RESET}"
+        echo -e "${YELLOW}Для гибридной графики рекомендуется использовать одно из решений:${RESET}"
+        echo -e "${YELLOW}1. Использовать конфигурацию с драйвером modesetting${RESET}"
+        echo -e "${YELLOW}2. Использовать инструменты типа optimus-manager, prime или amd-switcheroo${RESET}"
+        
+        # Проверяем существование конфигураций и предлагаем их удалить
+        XORG_CONF_DIR="/etc/X11/xorg.conf.d"
+        if [ -f "$XORG_CONF_DIR/20-intel.conf" ] || [ -f "$XORG_CONF_DIR/20-amdgpu.conf" ]; then
+            echo -e "${YELLOW}⚠️ Обнаружены конфликтующие файлы конфигурации:${RESET}"
+            
+            if [ -f "$XORG_CONF_DIR/20-intel.conf" ]; then
+                echo -e "${YELLOW}   - $XORG_CONF_DIR/20-intel.conf${RESET}"
+            fi
+            
+            if [ -f "$XORG_CONF_DIR/20-amdgpu.conf" ]; then
+                echo -e "${YELLOW}   - $XORG_CONF_DIR/20-amdgpu.conf${RESET}"
+            fi
+            
+            read -p "Удалить конфликтующие конфигурации? (y/n): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                if [ -f "$XORG_CONF_DIR/20-intel.conf" ]; then
+                    sudo rm "$XORG_CONF_DIR/20-intel.conf"
+                    echo -e "${GREEN}✅ Удален файл $XORG_CONF_DIR/20-intel.conf${RESET}"
+                fi
+                
+                if [ -f "$XORG_CONF_DIR/20-amdgpu.conf" ]; then
+                    sudo rm "$XORG_CONF_DIR/20-amdgpu.conf"
+                    echo -e "${GREEN}✅ Удален файл $XORG_CONF_DIR/20-amdgpu.conf${RESET}"
+                fi
+            fi
+        fi
     fi
 }
 
