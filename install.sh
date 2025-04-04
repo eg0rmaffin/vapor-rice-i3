@@ -17,6 +17,18 @@ echo "└───────────────────────�
 echo -e "${RESET}"
 
 # ─────────────────────────────────────────────
+# 🧱 Включаем multilib
+if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
+    echo -e "${YELLOW}🔧 Добавляем multilib репозиторий...${RESET}"
+    sudo sed -i '/#\[multilib\]/,/#Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
+    echo -e "${CYAN}🔄 Обновляем кеш pacman...${RESET}"
+    sudo pacman -Sy
+    echo -e "${GREEN}✅ multilib репозиторий активирован${RESET}"
+else
+    echo -e "${GREEN}✅ multilib уже включён${RESET}"
+fi
+
+# ─────────────────────────────────────────────
 # 🌐 Обновление зеркал с помощью reflector
 if ! command -v reflector &>/dev/null; then
     echo -e "${YELLOW}📦 Устанавливаем reflector для зеркал...${RESET}"
@@ -114,6 +126,30 @@ for pkg in "${aur_pkgs[@]}"; do
     fi
 done
 
+# ─────────────────────────────────────────────
+# 🧰 VirtualBox support
+
+vbox_pkgs=(
+    virtualbox
+    virtualbox-host-dkms
+    dkms
+    linux-headers
+)
+
+echo -e "${CYAN}📦 Installing VirtualBox and modules...${RESET}"
+for pkg in "${vbox_pkgs[@]}"; do
+    if ! pacman -Q "$pkg" &>/dev/null; then
+        sudo pacman -S --noconfirm "$pkg"
+    else
+        echo -e "${GREEN}✅ $pkg already installed${RESET}"
+    fi
+done
+
+echo -e "${CYAN}📦 Loading vboxdrv module...${RESET}"
+sudo modprobe vboxdrv || echo -e "${YELLOW}⚠️ Не удалось загрузить vboxdrv — возможно, нужно перезагрузить систему${RESET}"
+
+echo -e "${CYAN}👤 Добавляем пользователя в группу vboxusers...${RESET}"
+sudo usermod -aG vboxusers "$USER"
 
 # ─────────────────────────────────────────────
 # 🔗 Симлинки
@@ -230,8 +266,12 @@ echo -e "${CYAN}🕰️ Настраиваем RTC в режиме localtime...$
 sudo timedatectl set-local-rtc 1 --adjust-system-clock
 echo -e "${GREEN}✅ RTC теперь работает в localtime${RESET}"
 
-# ─────────────────────────────────────────────
+# ────── Раскладка alt shift ──────────────────────────
 
+echo -e "${CYAN}🎹 Применяем переключение раскладки Alt+Shift...${RESET}"
+setxkbmap -layout us,ru -option grp:alt_shift_toggle
+
+# ─────────────────────────────────────────────
 source ~/dotfiles/scripts/audio_setup.sh
 audio_setup
 
