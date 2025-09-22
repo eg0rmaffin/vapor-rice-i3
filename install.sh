@@ -36,7 +36,9 @@ if ! command -v reflector &>/dev/null; then
 fi
 
 echo -e "${CYAN}🌐 Обновляем зеркала с помощью reflector...${RESET}"
+
 sudo reflector --country Russia --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+
 echo -e "${GREEN}✅ Зеркала обновлены${RESET}"
 
 
@@ -73,6 +75,7 @@ deps=(
 	telegram-desktop
 	fd
 	htop
+	unzip
 	# Звуковая система
     	pipewire
     	pipewire-pulse
@@ -82,6 +85,8 @@ deps=(
     	pamixer
     	pavucontrol
     	sof-firmware
+	#utils
+	p7zip
 )
 
 for pkg in "${deps[@]}"; do
@@ -112,6 +117,7 @@ aur_pkgs=(
     light
     catppuccin-gtk-theme-mocha
     chicago95-icon-theme
+    shadowsocks-rust
 )
 
 for pkg in "${aur_pkgs[@]}"; do
