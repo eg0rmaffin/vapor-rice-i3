@@ -15,4 +15,7 @@ eval "$(dbus-launch --sh-syntax --exit-with-session)"
 # 🎹 Клавиатура
 setxkbmap -layout us,ru -option grp:alt_shift_toggle
 
+# 🔊 Ретро-звук при старте X
+paplay ~/dotfiles/sounds/startup.wav 2>/dev/null &
+
 exec i3 -c "$HOME/.config/i3/config"

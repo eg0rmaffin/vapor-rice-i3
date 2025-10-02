@@ -9,6 +9,20 @@ CYAN="\033[0;36m"
 RESET="\033[0m"
 
 # ─────────────────────────────────────────────
+# 🧩 helper: установка списков пакетов
+install_list() {
+  local -a pkgs=("$@")
+  for pkg in "${pkgs[@]}"; do
+    if ! pacman -Q "$pkg" &>/dev/null; then
+      echo -e "${YELLOW}📦 Installing $pkg...${RESET}"
+      sudo pacman -S --noconfirm "$pkg"
+    else
+      echo -e "${GREEN}✅ $pkg already installed${RESET}"
+    fi
+  done
+}
+
+# ─────────────────────────────────────────────
 # 🚀 Шапка
 echo -e "${CYAN}"
 echo "┌────────────────────────────────────────────┐"
@@ -52,7 +66,7 @@ deps=(
 	i3blocks
 	alacritty
 	tmux
-	rofi 
+	rofi
 	feh
 	picom
 	flameshot
@@ -76,6 +90,7 @@ deps=(
 	fd
 	htop
 	unzip
+	network-manager-applet
 	# Звуковая система
     	pipewire
     	pipewire-pulse
@@ -87,16 +102,21 @@ deps=(
     	sof-firmware
 	#utils
 	p7zip
+	qbittorrent
+	# ─── Wayland / Hyprland minimal ───
+    	hyprland
+    	waybar
+    	wl-clipboard
+    	grim
+    	slurp
+    	swappy
+    	swaybg             # фон
+    	xdg-desktop-portal
+    	xdg-desktop-portal-hyprland
 )
 
-for pkg in "${deps[@]}"; do
-    if ! pacman -Q "$pkg" &>/dev/null; then
-        echo -e "${YELLOW}📦 Installing $pkg...${RESET}"
-        sudo pacman -S --noconfirm "$pkg"
-    else
-        echo -e "${GREEN}✅ $pkg already installed${RESET}"
-    fi
-done
+# было: явный for-цикл; стало: вызов хелпера
+install_list "${deps[@]}"
 
 #-------- AUR pacs ----------
 
@@ -140,16 +160,12 @@ vbox_pkgs=(
     virtualbox-host-dkms
     dkms
     linux-headers
+    virtualbox-guest-iso
 )
 
 echo -e "${CYAN}📦 Installing VirtualBox and modules...${RESET}"
-for pkg in "${vbox_pkgs[@]}"; do
-    if ! pacman -Q "$pkg" &>/dev/null; then
-        sudo pacman -S --noconfirm "$pkg"
-    else
-        echo -e "${GREEN}✅ $pkg already installed${RESET}"
-    fi
-done
+# было: второй явный for-цикл; стало: тот же хелпер
+install_list "${vbox_pkgs[@]}"
 
 echo -e "${CYAN}📦 Loading vboxdrv module...${RESET}"
 sudo modprobe vboxdrv || echo -e "${YELLOW}⚠️ Не удалось загрузить vboxdrv — возможно, нужно перезагрузить систему${RESET}"
@@ -169,9 +185,10 @@ mkdir -p ~/.config
 ln -s ~/dotfiles/i3 ~/.config/i3
 
 # 🧩 Bash config
-echo -e "${CYAN}🔧 Linking .bashrc...${RESET}"
+echo -e "${CYAN}🔧 Linking .bashrc & .bash_profile...${RESET}"
 ln -sf ~/dotfiles/bash/.bashrc ~/.bashrc
-echo -e "${GREEN}✅ .bashrc linked${RESET}"
+ln -sf ~/dotfiles/bash/.bash_profile ~/.bash_profile
+echo -e "${GREEN}✅ bash configs linked${RESET}"
 
 # 🧩 Конфиг picom
 echo -e "${CYAN}🔧 Setting up picom...${RESET}"

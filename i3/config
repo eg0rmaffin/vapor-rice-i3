@@ -61,11 +61,15 @@ bindsym $mod+Shift+e exit
 # Numpad 1 — скриншот всего экрана в ~/Pictures/Screenshots
 bindsym KP_End exec --no-startup-id ~/dotfiles/bin/screenshot.sh
 
+# PrintScreen — скриншот выделенной области (как в Win11)
+bindsym Print exec --no-startup-id ~/dotfiles/bin/screenshot.sh area
+
 # Status bar configuration
 bar {
     status_command i3blocks
     font pango:FiraCode Nerd Font 14
     position top
+    tray_output primary
     colors {
         background #1a1a2e
         statusline #f8f8f2
@@ -115,3 +119,9 @@ include ~/dotfiles/i3/includes/audio.conf
 exec_always --no-startup-id ~/dotfiles/bin/detect-audio-keys.sh
 
 include $HOME/.config/i3/includes/multimedia.conf
+
+
+#--------------------------------------
+
+# Иконка Wi-Fi в трее
+exec_always --no-startup-id sh -lc 'pgrep -x nm-applet >/dev/null || nm-applet --sm-disable'
