@@ -43,21 +43,54 @@ else
 fi
 
 # ─────────────────────────────────────────────
-# 🌐 Обновление зеркал с помощью reflector
+# 🌐 Обновление зеркал (Reflector + geo CDN fallback)
+echo -e "${CYAN}🌐 Обновляем зеркала декларативно (geo CDN + RU/KZ/EU fallback)...${RESET}"
+
+# 1️⃣ Убедимся, что reflector установлен
 if ! command -v reflector &>/dev/null; then
-    echo -e "${YELLOW}📦 Устанавливаем reflector для зеркал...${RESET}"
+    echo -e "${YELLOW}📦 Устанавливаем reflector...${RESET}"
     sudo pacman -S --noconfirm reflector
 fi
 
-echo -e "${CYAN}🌐 Обновляем зеркала с помощью reflector...${RESET}"
+# 2️⃣ Бэкапим текущий список зеркал (на случай фейла)
+sudo cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
 
-sudo reflector --country Russia --age 12 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+# 3️⃣ Создаём временный список, начиная с geo CDN
+echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' | sudo tee /tmp/mirrorlist.new >/dev/null
 
-echo -e "${GREEN}✅ Зеркала обновлены${RESET}"
+# 4️⃣ Добавляем быстрые зеркала из выбранных стран (если reflector отработал успешно)
+if sudo reflector \
+    --country Russia,Kazakhstan,Germany,Netherlands,Sweden,Finland,Poland,France,Switzerland,Austria \
+    --protocol https \
+    --ipv4 \
+    --timeout 10 \
+    --download-timeout 10 \
+    --age 24 \
+    --latest 20 \
+    --sort rate \
+    --save /tmp/mirrorlist.reflector; then
+    sudo tee -a /tmp/mirrorlist.new < /tmp/mirrorlist.reflector >/dev/null
+else
+    echo -e "${YELLOW}⚠️  Reflector не смог получить зеркала, используем только geo CDN${RESET}"
+fi
+
+# 5️⃣ Проверяем, что новое зеркало реально доступно
+FIRST_URL=$(grep -m1 '^Server ' /tmp/mirrorlist.new | sed 's|Server = ||' | sed "s|\$repo|core|;s|\$arch|x86_64|")
+if curl -s --connect-timeout 5 --max-time 10 "$FIRST_URL/core.db" >/dev/null; then
+    sudo mv /tmp/mirrorlist.new /etc/pacman.d/mirrorlist
+    echo -e "${GREEN}✅ Зеркала обновлены (geo CDN + быстрые EU/RU/KZ)${RESET}"
+else
+    echo -e "${YELLOW}⚠️  Новый список зеркал не прошёл проверку, откатываемся к старому${RESET}"
+    sudo mv /etc/pacman.d/mirrorlist.bak /etc/pacman.d/mirrorlist 2>/dev/null || true
+fi
+
+# 6️⃣ Синхронизируем базы только после финального списка зеркал
+sudo pacman -Syy --noconfirm
+echo -e "${GREEN}✅ Mirrorlist обновлён и базы синхронизированы${RESET}"
 
 
 # ─────────────────────────────────────────────
-# 📦 Зависимости
+# 📦 Зависимости pacman
 deps=(
 	xorg-server
 	xorg-xinit
@@ -91,6 +124,7 @@ deps=(
 	htop
 	unzip
 	network-manager-applet
+	obsidian
 	# Звуковая система
     	pipewire
     	pipewire-pulse
@@ -103,6 +137,7 @@ deps=(
 	#utils
 	p7zip
 	qbittorrent
+	firejail #проверка подозрительных appImage
 	# ─── Wayland / Hyprland minimal ───
     	hyprland
     	waybar
@@ -138,6 +173,7 @@ aur_pkgs=(
     catppuccin-gtk-theme-mocha
     chicago95-icon-theme
     shadowsocks-rust
+    woeusb-ng #типо rufus для прошивки флешек (только iso винды)
 )
 
 for pkg in "${aur_pkgs[@]}"; do
