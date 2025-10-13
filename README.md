@@ -7,4 +7,5 @@
 ## Screenshots
 
 ![rice](screenshots/rice.png)
+![rice2](screenshots/rice2.png)
 
