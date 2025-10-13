@@ -43,8 +43,12 @@ else
 fi
 
 # ─────────────────────────────────────────────
-# 🌐 Обновление зеркал (Reflector + geo CDN fallback)
-echo -e "${CYAN}🌐 Обновляем зеркала декларативно (geo CDN + RU/KZ/EU fallback)...${RESET}"
+# ─────────────────────────────────────────────
+# 🌐 Обновление зеркал (с кешем и фоллбеком)
+echo -e "${CYAN}🌐 Проверяем зеркала...${RESET}"
+
+MIRROR_CACHE="$HOME/.cache/mirrorlist"
+CACHE_AGE_DAYS=7
 
 # 1️⃣ Убедимся, что reflector установлен
 if ! command -v reflector &>/dev/null; then
@@ -52,42 +56,54 @@ if ! command -v reflector &>/dev/null; then
     sudo pacman -S --noconfirm reflector
 fi
 
-# 2️⃣ Бэкапим текущий список зеркал (на случай фейла)
+# 2️⃣ Бэкапим текущий список
 sudo cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
 
-# 3️⃣ Создаём временный список, начиная с geo CDN
-echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' | sudo tee /tmp/mirrorlist.new >/dev/null
-
-# 4️⃣ Добавляем быстрые зеркала из выбранных стран (если reflector отработал успешно)
-if sudo reflector \
-    --country Russia,Kazakhstan,Germany,Netherlands,Sweden,Finland,Poland,France,Switzerland,Austria \
-    --protocol https \
-    --ipv4 \
-    --timeout 10 \
-    --download-timeout 10 \
-    --age 24 \
-    --latest 20 \
-    --sort rate \
-    --save /tmp/mirrorlist.reflector; then
-    sudo tee -a /tmp/mirrorlist.new < /tmp/mirrorlist.reflector >/dev/null
-else
-    echo -e "${YELLOW}⚠️  Reflector не смог получить зеркала, используем только geo CDN${RESET}"
-fi
-
-# 5️⃣ Проверяем, что новое зеркало реально доступно
-FIRST_URL=$(grep -m1 '^Server ' /tmp/mirrorlist.new | sed 's|Server = ||' | sed "s|\$repo|core|;s|\$arch|x86_64|")
-if curl -s --connect-timeout 5 --max-time 10 "$FIRST_URL/core.db" >/dev/null; then
+# 3️⃣ Функция обновления зеркал
+update_mirrors() {
+    echo -e "${CYAN}🔄 Обновляем зеркала через reflector (~1 мин)...${RESET}"
+    
+    echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /tmp/mirrorlist.new
+    
+    if sudo reflector \
+        --country Russia,Kazakhstan,Germany,Netherlands,Sweden,Finland \
+        --protocol https \
+        --ipv4 \
+        --connection-timeout 15 \
+        --download-timeout 15 \
+        --latest 10 \
+        --sort rate \
+        --save /tmp/mirrorlist.reflector 2>/dev/null && \
+       grep -q '^Server' /tmp/mirrorlist.reflector; then
+        
+        cat /tmp/mirrorlist.reflector >> /tmp/mirrorlist.new
+        echo -e "${GREEN}✅ Добавлено $(grep -c '^Server' /tmp/mirrorlist.reflector) зеркал${RESET}"
+    else
+        echo -e "${YELLOW}⚠️ Reflector не отработал, используем только geo CDN${RESET}"
+    fi
+    
+    mkdir -p "$(dirname "$MIRROR_CACHE")"
+    cp /tmp/mirrorlist.new "$MIRROR_CACHE"
     sudo mv /tmp/mirrorlist.new /etc/pacman.d/mirrorlist
-    echo -e "${GREEN}✅ Зеркала обновлены (geo CDN + быстрые EU/RU/KZ)${RESET}"
+}
+
+# 4️⃣ Проверяем кеш
+if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAYS 2>/dev/null)" ]; then
+    echo -e "${GREEN}✅ Используем закешированные зеркала (<$CACHE_AGE_DAYS дней)${RESET}"
+    sudo cp "$MIRROR_CACHE" /etc/pacman.d/mirrorlist
+    
+    # Проверяем, работают ли зеркала
+    if ! sudo pacman -Sy --noconfirm 2>/dev/null; then
+        echo -e "${YELLOW}⚠️ Закешированные зеркала не работают, обновляем...${RESET}"
+        update_mirrors
+    fi
 else
-    echo -e "${YELLOW}⚠️  Новый список зеркал не прошёл проверку, откатываемся к старому${RESET}"
-    sudo mv /etc/pacman.d/mirrorlist.bak /etc/pacman.d/mirrorlist 2>/dev/null || true
+    update_mirrors
 fi
 
-# 6️⃣ Синхронизируем базы только после финального списка зеркал
+# 5️⃣ Финальная синхронизация
 sudo pacman -Syy --noconfirm
-echo -e "${GREEN}✅ Mirrorlist обновлён и базы синхронизированы${RESET}"
-
+echo -e "${GREEN}✅ Mirrorlist готов${RESET}"
 
 # ─────────────────────────────────────────────
 # 📦 Зависимости pacman
@@ -125,6 +141,7 @@ deps=(
 	unzip
 	network-manager-applet
 	obsidian
+	light #определяет яркость
 	# Звуковая система
     	pipewire
     	pipewire-pulse
@@ -138,6 +155,7 @@ deps=(
 	p7zip
 	qbittorrent
 	firejail #проверка подозрительных appImage
+	xournalpp #доска для рисования
 	# ─── Wayland / Hyprland minimal ───
     	hyprland
     	waybar

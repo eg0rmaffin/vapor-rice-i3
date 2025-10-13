@@ -152,6 +152,42 @@ EOF
     else
         echo -e "${GREEN}✅ Служба powertop-auto-tune уже существует${RESET}"
     fi
+
+
+
+        # ─── Настройка яркости экрана ───
+    echo -e "${CYAN}💡 Настраиваем управление яркостью...${RESET}"
+
+    UDEV_BACKLIGHT="/etc/udev/rules.d/90-backlight.rules"
+    if [ ! -f "$UDEV_BACKLIGHT" ]; then
+        sudo tee "$UDEV_BACKLIGHT" > /dev/null <<'EOF'
+# Разрешаем пользователям группы video управлять яркостью
+ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness"
+ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
+EOF
+        echo -e "${GREEN}✅ Udev правило для яркости создано${RESET}"
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --subsystem-match=backlight
+    else
+        echo -e "${GREEN}✅ Udev правило для яркости уже существует${RESET}"
+    fi
+
+    # Добавляем пользователя в группу video
+    if ! groups "$USER" | grep -q '\bvideo\b'; then
+        sudo usermod -aG video "$USER"
+        echo -e "${GREEN}✅ Пользователь добавлен в группу video${RESET}"
+        echo -e "${YELLOW}⚠️ Требуется перелогиниться для применения прав${RESET}"
+    else
+        echo -e "${GREEN}✅ Пользователь уже в группе video${RESET}"
+    fi
+
+    # Проверка на проблемные модели
+    PRODUCT=$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo "unknown")
+    if [ "$PRODUCT" = "83DH" ] && [ -d "/sys/class/backlight/ideapad" ]; then
+        echo -e "${YELLOW}⚠️  Обнаружен Lenovo IdeaPad с фейковым backlight${RESET}"
+        echo -e "${YELLOW}📝 Для работы яркости добавьте в загрузчик: acpi_backlight=native${RESET}"
+        echo -e "${YELLOW}💡 После перезагрузки яркость заработает автоматически!${RESET}"
+    fi
     
     echo -e "${GREEN}✅ Настройка энергосбережения для ноутбука завершена!${RESET}"
 }
