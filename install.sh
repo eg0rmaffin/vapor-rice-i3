@@ -338,6 +338,15 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
     fi
 done
 
+# ─────────────────────────────────────────────
+# 🔵 Bluetooth
+echo -e "${CYAN}🔧 Настраиваем Bluetooth...${RESET}"
+install_list bluez bluez-utils blueman
+sudo systemctl enable bluetooth.service
+sudo systemctl start bluetooth.service
+echo -e "${GREEN}✅ Bluetooth установлен${RESET}"
+
+
 # ─── 🕰️ Настройка локального времени RTC ──────
 echo -e "${CYAN}🕰️ Настраиваем RTC в режиме localtime...${RESET}"
 sudo timedatectl set-local-rtc 1 --adjust-system-clock

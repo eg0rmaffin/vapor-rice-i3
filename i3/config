@@ -134,3 +134,6 @@ exec_always --no-startup-id sh -lc 'pgrep -x nm-applet >/dev/null || nm-applet -
 
 #Обои
 exec_always --no-startup-id ~/.fehbg
+
+#Блютик
+exec_always --no-startup-id blueman-applet
