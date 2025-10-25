@@ -347,6 +347,22 @@ sudo systemctl start bluetooth.service
 echo -e "${GREEN}✅ Bluetooth установлен${RESET}"
 
 
+# ─── 🟣 Notifications / OSD ─────────────────────────────
+echo -e "${CYAN}🔧 Setting up notification daemon (dunst)...${RESET}"
+install_list dunst libnotify pamixer
+
+mkdir -p ~/.config/dunst
+ln -sf ~/dotfiles/dunst/dunstrc ~/.config/dunst/dunstrc
+echo -e "${GREEN}✅ dunst config linked${RESET}"
+
+systemctl --user enable --now dunst.service 2>/dev/null || true
+
+# 🔗 OSD scripts
+echo -e "${CYAN}🔧 Linking OSD scripts...${RESET}"
+mkdir -p ~/.local/bin
+ln -sf ~/dotfiles/scripts/osd/volume.sh ~/.local/bin/volume.sh
+echo -e "${GREEN}✅ volume.sh linked${RESET}"
+
 # ─── 🕰️ Настройка локального времени RTC ──────
 echo -e "${CYAN}🕰️ Настраиваем RTC в режиме localtime...${RESET}"
 sudo timedatectl set-local-rtc 1 --adjust-system-clock

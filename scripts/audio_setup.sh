@@ -45,14 +45,14 @@ if [ ${#AUDIO_KEYS[@]} -eq 0 ]; then
 else
     # Добавляем найденные клавиши в конфиг
     if [[ " ${AUDIO_KEYS[*]} " =~ "XF86AudioRaiseVolume" ]]; then
-        echo "bindsym XF86AudioRaiseVolume exec --no-startup-id pamixer -i 5 # Громкость +" >> "$AUDIO_CONF"
-    fi
-    if [[ " ${AUDIO_KEYS[*]} " =~ "XF86AudioLowerVolume" ]]; then
-        echo "bindsym XF86AudioLowerVolume exec --no-startup-id pamixer -d 5 # Громкость -" >> "$AUDIO_CONF"
-    fi
-    if [[ " ${AUDIO_KEYS[*]} " =~ "XF86AudioMute" ]]; then
-        echo "bindsym XF86AudioMute exec --no-startup-id pamixer -t # Выкл/вкл звук" >> "$AUDIO_CONF"
-    fi
+    echo "bindsym XF86AudioRaiseVolume exec --no-startup-id pamixer -i 5 && ~/.local/bin/volume.sh # Громкость +" >> "$AUDIO_CONF"
+	fi
+if [[ " ${AUDIO_KEYS[*]} " =~ "XF86AudioLowerVolume" ]]; then
+    echo "bindsym XF86AudioLowerVolume exec --no-startup-id pamixer -d 5 && ~/.local/bin/volume.sh # Громкость -" >> "$AUDIO_CONF"
+	fi
+if [[ " ${AUDIO_KEYS[*]} " =~ "XF86AudioMute" ]]; then
+    echo "bindsym XF86AudioMute exec --no-startup-id pamixer -t && ~/.local/bin/volume.sh # Выкл/вкл звук" >> "$AUDIO_CONF"
+	fi
 fi
 
 # Добавляем открытие аудио-микшера
