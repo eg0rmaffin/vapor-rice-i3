@@ -156,6 +156,7 @@ deps=(
 	qbittorrent
 	firejail #проверка подозрительных appImage
 	xournalpp #доска для рисования
+	thunderbird #thunderbird (no comments)
 	# ─── Wayland / Hyprland minimal ───
     	hyprland
     	waybar
