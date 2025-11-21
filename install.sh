@@ -136,9 +136,11 @@ deps=(
 	gvfs
 	gvfs-mtp
 	telegram-desktop
+	discord
 	fd
 	htop
 	unzip
+	zip
 	network-manager-applet
 	obsidian
 	light #определяет яркость
@@ -191,8 +193,9 @@ aur_pkgs=(
     light
     catppuccin-gtk-theme-mocha
     chicago95-icon-theme
-    shadowsocks-rust
+    shadowsocks-rust #sslocal для аутлайн протокола впн
     woeusb-ng #типо rufus для прошивки флешек (только iso винды)
+    hiddify-next-bin #современный клиент для VLESS+Reality протоколов впн
 )
 
 for pkg in "${aur_pkgs[@]}"; do
@@ -274,6 +277,26 @@ echo -e "${CYAN}🔧 Linking i3blocks config...${RESET}"
 mkdir -p ~/.config/i3blocks
 ln -sf ~/dotfiles/i3blocks/config ~/.config/i3blocks/config
 echo -e "${GREEN}✅ i3blocks config linked${RESET}"
+
+# 🧩 Vim config
+echo -e "${CYAN}🔧 Linking Vim config...${RESET}"
+ln -sf ~/dotfiles/vim/.vimrc ~/.vimrc
+echo -e "${GREEN}✅ Vim config linked${RESET}"
+
+# 🟣 Discord Proxy
+echo -e "${CYAN}🔧 Linking Discord Proxy...${RESET}"
+
+mkdir -p ~/.local/bin
+ln -sf ~/dotfiles/discord/discord-proxy.sh ~/.local/bin/discord-proxy
+
+mkdir -p ~/.local/share/applications
+ln -sf ~/dotfiles/discord/discord-proxy.desktop ~/.local/share/applications/discord-proxy.desktop
+
+# опционально, чтобы меню обновилось
+update-desktop-database ~/.local/share/applications 2>/dev/null || true
+
+echo -e "${GREEN}✅ Discord Proxy linked${RESET}"
+
 
 echo -e "${GREEN}✅ All symlinks created${RESET}"
 

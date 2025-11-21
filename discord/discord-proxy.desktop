@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Discord (Proxy)
+Comment=Discord through local SOCKS5 proxy
+Exec=/usr/bin/env discord-proxy
+Icon=discord
+Terminal=false
+Categories=Network;Chat;
