@@ -159,16 +159,18 @@ deps=(
 	firejail #проверка подозрительных appImage
 	xournalpp #доска для рисования
 	thunderbird #thunderbird (no comments)
-	# ─── Wayland / Hyprland minimal ───
-    	hyprland
-    	waybar
+	# ─── Wayland / Sway minimal ───
+    	sway
+        swaylock
+        swayidle
+        waybar
     	wl-clipboard
     	grim
     	slurp
     	swappy
     	swaybg             # фон
     	xdg-desktop-portal
-    	xdg-desktop-portal-hyprland
+        xdg-desktop-portal-wlr
 )
 
 # было: явный for-цикл; стало: вызов хелпера
