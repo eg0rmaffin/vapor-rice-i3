@@ -1,0 +1,28 @@
+#!/bin/bash
+# Сравнение двух снэпшотов
+# Usage: snapshot-diff <snapshot1> <snapshot2>
+
+GREEN="\033[0;32m"
+CYAN="\033[0;36m"
+YELLOW="\033[1;33m"
+RED="\033[0;31m"
+RESET="\033[0m"
+
+# Проверяем, настроен ли Snapper
+if ! sudo snapper -c root list &>/dev/null; then
+    echo -e "${RED}❌ Snapper не настроен. Запустите snapshot_setup.sh${RESET}"
+    exit 1
+fi
+
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo -e "${YELLOW}Использование: snapshot-diff <номер1> <номер2>${RESET}"
+    echo -e "${CYAN}Пример: snapshot-diff 1 5${RESET}"
+    echo ""
+    echo -e "${CYAN}Доступные снэпшоты:${RESET}"
+    sudo snapper -c root list
+    exit 1
+fi
+
+echo -e "${CYAN}🔍 Сравнение снэпшотов $1 и $2:${RESET}"
+echo ""
+sudo snapper -c root status "$1".."$2"

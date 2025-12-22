@@ -1,0 +1,16 @@
+#!/bin/bash
+# Просмотр списка снэпшотов
+# Usage: snapshot-list
+
+CYAN="\033[0;36m"
+RED="\033[0;31m"
+RESET="\033[0m"
+
+# Проверяем, настроен ли Snapper
+if ! sudo snapper -c root list &>/dev/null; then
+    echo -e "${RED}❌ Snapper не настроен. Запустите snapshot_setup.sh${RESET}"
+    exit 1
+fi
+
+echo -e "${CYAN}📋 Список снэпшотов:${RESET}"
+sudo snapper -c root list

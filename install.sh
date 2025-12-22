@@ -412,5 +412,19 @@ setup_power_management
 source ~/dotfiles/scripts/hardware_config.sh
 configure_hardware
 
+# ─── 📸 Snapshot helper scripts ──────────────────────────
+echo -e "${CYAN}🔧 Linking snapshot scripts...${RESET}"
+mkdir -p ~/.local/bin
+for script in snapshot-create snapshot-list snapshot-diff snapshot-delete snapshot-rollback; do
+    if [ -f ~/dotfiles/bin/$script ]; then
+        ln -sf ~/dotfiles/bin/$script ~/.local/bin/$script
+        echo -e "${GREEN}✅ $script linked${RESET}"
+    fi
+done
+
+# ─── 📸 Snapshots (Btrfs + Snapper) ──────────────────────
+source ~/dotfiles/scripts/snapshot_setup.sh
+setup_snapshots
+
 # 🎉 Финал
 echo -e "${GREEN}✅ All done! You can launch i3 with \`startx\` from tty 🎉${RESET}"
