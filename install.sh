@@ -159,6 +159,7 @@ deps=(
 	firejail #проверка подозрительных appImage
 	xournalpp #доска для рисования
 	thunderbird #thunderbird (no comments)
+    bind #для сетевых тестов
 	# ─── Wayland / Sway minimal ───
     	sway
         swaylock
