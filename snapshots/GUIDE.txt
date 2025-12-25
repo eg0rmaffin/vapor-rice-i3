@@ -1,0 +1,50 @@
+SNAPSHOT GUIDE
+==============
+
+Btrfs snapshots via Snapper. Auto-snapshots on package updates, bootable from GRUB.
+
+REQUIREMENTS
+------------
+- Btrfs filesystem on root partition
+- Snapper installed (auto-installed by setup script)
+
+COMMANDS
+--------
+
+  snapshot-create [description]   Create a manual snapshot
+  snapshot-list                   List all snapshots
+  snapshot-diff <num1> <num2>     Compare changes between snapshots
+  snapshot-delete <num>           Delete a snapshot
+  snapshot-rollback               Show rollback instructions
+
+EXAMPLES
+--------
+
+  # Create snapshot before risky changes
+  snapshot-create "before nvidia install"
+
+  # List all snapshots
+  snapshot-list
+
+  # See what changed between snapshots 1 and 5
+  snapshot-diff 1 5
+
+  # Delete old snapshot
+  snapshot-delete 3
+
+AUTO-SNAPSHOTS
+--------------
+- snap-pac: creates pre/post snapshots on every pacman transaction
+- timeline: hourly snapshots (5 hourly, 7 daily, 4 weekly, 6 monthly, 2 yearly)
+
+ROLLBACK
+--------
+1. Reboot
+2. In GRUB menu select "Arch Linux snapshots"
+3. Pick the snapshot to boot into
+4. For permanent rollback, run snapshot-rollback for detailed instructions
+
+TROUBLESHOOTING
+---------------
+If commands don't work, make sure ~/.local/bin is in your PATH.
+If Snapper not configured, run: ~/dotfiles/scripts/snapshot_setup.sh
