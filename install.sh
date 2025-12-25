@@ -285,6 +285,12 @@ echo -e "${CYAN}🔧 Linking Vim config...${RESET}"
 ln -sf ~/dotfiles/vim/.vimrc ~/.vimrc
 echo -e "${GREEN}✅ Vim config linked${RESET}"
 
+# 🧩 Rofi config
+echo -e "${CYAN}🔧 Linking Rofi config...${RESET}"
+mkdir -p ~/.config/rofi
+ln -sf ~/dotfiles/rofi/config.rasi ~/.config/rofi/config.rasi
+echo -e "${GREEN}✅ Rofi config linked${RESET}"
+
 # 🟣 Discord Proxy
 echo -e "${CYAN}🔧 Linking Discord Proxy...${RESET}"
 
