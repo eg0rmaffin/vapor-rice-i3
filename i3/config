@@ -137,3 +137,6 @@ exec_always --no-startup-id ~/.fehbg
 
 #Блютик
 exec_always --no-startup-id blueman-applet
+
+#Батарейка
+exec_always --no-startup-id sh -lc 'pgrep -x cbatticon >/dev/null || cbatticon'
