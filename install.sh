@@ -130,6 +130,8 @@ deps=(
 	thunar
 	thunar-archive-plugin
 	thunar-volman
+	xarchiver
+	unrar
 	dbus
 	polkit
 	tumbler
