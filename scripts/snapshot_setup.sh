@@ -326,8 +326,8 @@ link_helper_scripts() {
 
     # Создаем симлинки из dotfiles
     for script in snapshot-create snapshot-list snapshot-diff snapshot-delete snapshot-rollback; do
-        if [ -f ~/dotfiles/snapshots/$script ]; then
-            ln -sf ~/dotfiles/snapshots/$script ~/.local/bin/$script
+        if [ -f ~/dotfiles/bin/snapshots/$script ]; then
+            ln -sf ~/dotfiles/bin/snapshots/$script ~/.local/bin/$script
             echo -e "${GREEN}✅ $script связан${RESET}"
         fi
     done
