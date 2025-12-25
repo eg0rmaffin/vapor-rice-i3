@@ -1,0 +1,28 @@
+#!/bin/bash
+# Создание ручного снэпшота системы
+# Usage: snapshot-create [description]
+
+GREEN="\033[0;32m"
+CYAN="\033[0;36m"
+RED="\033[0;31m"
+RESET="\033[0m"
+
+DESCRIPTION="${1:-Manual snapshot}"
+
+# Проверяем, настроен ли Snapper
+if ! sudo snapper -c root list &>/dev/null; then
+    echo -e "${RED}❌ Snapper не настроен. Запустите snapshot_setup.sh${RESET}"
+    exit 1
+fi
+
+echo -e "${CYAN}📸 Создаем снэпшот: $DESCRIPTION${RESET}"
+
+if sudo snapper -c root create --description "$DESCRIPTION"; then
+    echo -e "${GREEN}✅ Снэпшот создан успешно${RESET}"
+    echo ""
+    echo -e "${CYAN}Последние снэпшоты:${RESET}"
+    sudo snapper -c root list | tail -5
+else
+    echo -e "${RED}❌ Ошибка при создании снэпшота${RESET}"
+    exit 1
+fi
