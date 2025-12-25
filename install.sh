@@ -260,6 +260,7 @@ echo -e "${GREEN}✅ picom config linked${RESET}"
 echo -e "${CYAN}🔧 Linking GTK 3.0 settings...${RESET}"
 mkdir -p ~/.config/gtk-3.0
 ln -sf ~/dotfiles/gtk-3.0/settings.ini ~/.config/gtk-3.0/settings.ini
+ln -sf ~/dotfiles/gtk-3.0/bookmarks ~/.config/gtk-3.0/bookmarks
 echo -e "${GREEN}✅ GTK 3.0 settings linked${RESET}"
 
 # 🧩 Alacritty
