@@ -67,9 +67,9 @@ bindsym Print exec --no-startup-id ~/dotfiles/bin/screenshot.sh area
 #Wallpaper switcher
 bindsym $mod+w exec --no-startup-id ~/dotfiles/bin/wallpaper.sh
 
-# ─── Управление яркостью экрана (НЕ РАБОТАЕТ на Lenovo IdeaPad 83DH) ───
-# bindsym XF86MonBrightnessUp exec --no-startup-id ~/dotfiles/bin/brightness.sh up
-# bindsym XF86MonBrightnessDown exec --no-startup-id ~/dotfiles/bin/brightness.sh down
+# ─── Управление яркостью экрана ───
+bindsym XF86MonBrightnessUp exec --no-startup-id ~/dotfiles/bin/brightness.sh up
+bindsym XF86MonBrightnessDown exec --no-startup-id ~/dotfiles/bin/brightness.sh down
 
 # Status bar configuration
 bar {

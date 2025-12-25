@@ -18,8 +18,8 @@ fi
 BACKLIGHT_DEVICE=""
 
 
-# Приоритет: intel_backlight > amdgpu_bl* > acpi_video* > всё остальное (кроме ideapad)
-for pattern in "intel_backlight" "amdgpu_bl" "acpi_video"; do
+# Приоритет: nvidia_wmi_ec_backlight > intel_backlight > amdgpu_bl* > acpi_video* > всё остальное (кроме ideapad и nvidia_0)
+for pattern in "nvidia_wmi_ec_backlight" "intel_backlight" "amdgpu_bl" "acpi_video"; do
     for device in "$BACKLIGHT_DIR"/$pattern*; do
         if [ -d "$device" ]; then
             BACKLIGHT_DEVICE="$(basename "$device")"
@@ -28,12 +28,13 @@ for pattern in "intel_backlight" "amdgpu_bl" "acpi_video"; do
     done
 done
 
-# Если не нашли — берём любой, НО НЕ ideapad
+# Если не нашли — берём любой, НО НЕ ideapad и nvidia_0
 if [ -z "$BACKLIGHT_DEVICE" ]; then
     for device in "$BACKLIGHT_DIR"/*; do
         if [ -d "$device" ]; then
             name="$(basename "$device")"
-            if [ "$name" != "ideapad" ]; then
+            # Исключаем проблемные устройства: ideapad (фейковый) и nvidia_0 (не работает в гибридном режиме)
+            if [ "$name" != "ideapad" ] && [ "$name" != "nvidia_0" ]; then
                 BACKLIGHT_DEVICE="$name"
                 break
             fi
