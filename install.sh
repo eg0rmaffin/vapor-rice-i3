@@ -390,6 +390,27 @@ mkdir -p ~/.local/bin
 ln -sf ~/dotfiles/scripts/osd/volume.sh ~/.local/bin/volume.sh
 echo -e "${GREEN}✅ volume.sh linked${RESET}"
 
+# ─── 💡 Keyboard Backlight Support ──────
+echo -e "${CYAN}💡 Setting up keyboard backlight support...${RESET}"
+mkdir -p ~/.local/bin
+ln -sf ~/dotfiles/bin/kbd-backlight.sh ~/.local/bin/kbd-backlight.sh
+echo -e "${GREEN}✅ kbd-backlight.sh linked${RESET}"
+
+# Create udev rule for keyboard backlight permissions
+KBD_UDEV_RULE="/etc/udev/rules.d/90-kbd-backlight.rules"
+if [ ! -f "$KBD_UDEV_RULE" ]; then
+    echo -e "${CYAN}🔧 Creating udev rule for keyboard backlight...${RESET}"
+    sudo tee "$KBD_UDEV_RULE" > /dev/null <<'EOF'
+# Allow users in video group to control keyboard backlight
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="*kbd*", RUN+="/bin/chmod g+w /sys/class/leds/%k/brightness", RUN+="/bin/chgrp video /sys/class/leds/%k/brightness"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="*kbd*", RUN+="/bin/chmod g+w /sys/class/leds/%k/brightness_hw_changed", RUN+="/bin/chgrp video /sys/class/leds/%k/brightness_hw_changed"
+EOF
+    sudo udevadm control --reload-rules
+    echo -e "${GREEN}✅ Keyboard backlight udev rule created${RESET}"
+else
+    echo -e "${GREEN}✅ Keyboard backlight udev rule already exists${RESET}"
+fi
+
 # ─── 🕰️ Настройка локального времени RTC ──────
 echo -e "${CYAN}🕰️ Настраиваем RTC в режиме localtime...${RESET}"
 sudo timedatectl set-local-rtc 1 --adjust-system-clock

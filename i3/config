@@ -126,6 +126,11 @@ exec_always --no-startup-id ~/dotfiles/bin/detect-audio-keys.sh
 
 include $HOME/.config/i3/includes/multimedia.conf
 
+# Keyboard backlight configuration for laptops
+include ~/dotfiles/i3/includes/kbd-backlight.conf
+# Auto-detect keyboard backlight keys on startup
+exec_always --no-startup-id ~/dotfiles/bin/detect-kbd-backlight-keys.sh
+
 
 #--------------------------------------
 
