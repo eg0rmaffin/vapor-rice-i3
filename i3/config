@@ -58,6 +58,10 @@ bindsym $mod+Shift+r restart
 # Exit i3 (logs you out of your X session)
 bindsym $mod+Shift+e exit
 
+# ─── Vaporwave Power Menu (Win95 Style) ─────────────────
+# Aesthetic shutdown/reboot/suspend menu
+bindsym $mod+Shift+p exec --no-startup-id ~/dotfiles/bin/power-menu.sh
+
 # Numpad 1 — скриншот всего экрана в ~/Pictures/Screenshots
 bindsym KP_End exec --no-startup-id ~/dotfiles/bin/screenshot.sh
 
