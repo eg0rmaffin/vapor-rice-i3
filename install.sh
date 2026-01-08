@@ -160,6 +160,7 @@ deps=(
 	xournalpp #доска для рисования
 	thunderbird #thunderbird (no comments)
     bind #для сетевых тестов
+	playerctl #управление медиаплеерами (MPRIS)
 	# ─── Wayland / Sway minimal ───
     	sway
         swaylock
@@ -384,11 +385,15 @@ echo -e "${GREEN}✅ dunst config linked${RESET}"
 
 systemctl --user enable --now dunst.service 2>/dev/null || true
 
-# 🔗 OSD scripts
+# 🔗 OSD scripts (dunst panel support for volume, brightness, media, mic)
 echo -e "${CYAN}🔧 Linking OSD scripts...${RESET}"
 mkdir -p ~/.local/bin
+ln -sf ~/dotfiles/scripts/osd/osd-panel.sh ~/.local/bin/osd-panel.sh
 ln -sf ~/dotfiles/scripts/osd/volume.sh ~/.local/bin/volume.sh
-echo -e "${GREEN}✅ volume.sh linked${RESET}"
+ln -sf ~/dotfiles/scripts/osd/brightness.sh ~/.local/bin/brightness-osd.sh
+ln -sf ~/dotfiles/scripts/osd/media.sh ~/.local/bin/media-osd.sh
+ln -sf ~/dotfiles/scripts/osd/microphone.sh ~/.local/bin/microphone-osd.sh
+echo -e "${GREEN}✅ OSD scripts linked (volume, brightness, media, microphone)${RESET}"
 
 # ─── 🕰️ Настройка локального времени RTC ──────
 echo -e "${CYAN}🕰️ Настраиваем RTC в режиме localtime...${RESET}"
