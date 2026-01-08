@@ -26,7 +26,20 @@
 # ─── Vaporwave Volume OSD ─────────────────────────────
 [volume-osd]
     appname = "volume-osd"
-    background = "#1a1a2e"
+    # Bigger font for better visibility
+    font = Noto Sans Bold 14
+    # Larger padding for a more prominent panel
+    padding = 16
+    horizontal_padding = 20
+    # Wider, taller progress bar
+    progress_bar_height = 14
+    progress_bar_frame_width = 2
+    progress_bar_min_width = 280
+    progress_bar_max_width = 280
+    # Thicker frame for emphasis
+    frame_width = 3
+    # Vaporwave colors - pink highlight on dark background
+    background = "#1a1a2eee"
     foreground = "#f8f8f2"
-    frame_color = "#8be9fd"
+    frame_color = "#ff79c6"
     highlight = "#ff79c6"
