@@ -1,6 +1,7 @@
 #!/bin/bash
-# Удаление снэпшота
-# Usage: snapshot-delete <snapshot_number>
+# Delete a system snapshot
+# Usage: snapshot-delete <snapshot_name_or_number>
+# Supports: Timeshift (ext4/rsync) and Snapper (Btrfs)
 
 GREEN="\033[0;32m"
 CYAN="\033[0;36m"
@@ -8,30 +9,69 @@ YELLOW="\033[1;33m"
 RED="\033[0;31m"
 RESET="\033[0m"
 
-# Проверяем, настроен ли Snapper
-if ! sudo snapper -c root list &>/dev/null; then
-    echo -e "${RED}❌ Snapper не настроен. Запустите snapshot_setup.sh${RESET}"
-    exit 1
-fi
-
-if [ -z "$1" ]; then
-    echo -e "${YELLOW}Использование: snapshot-delete <номер>${RESET}"
-    echo -e "${CYAN}Пример: snapshot-delete 5${RESET}"
-    echo ""
-    echo -e "${CYAN}Доступные снэпшоты:${RESET}"
-    sudo snapper -c root list
-    exit 1
-fi
-
-echo -e "${YELLOW}⚠️  Вы уверены, что хотите удалить снэпшот $1? (y/N)${RESET}"
-read -r confirm
-if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-    if sudo snapper -c root delete "$1"; then
-        echo -e "${GREEN}✅ Снэпшот $1 удален${RESET}"
+# Detect which snapshot tool is available
+detect_backend() {
+    if command -v timeshift &>/dev/null && [ -f /etc/timeshift/timeshift.json ]; then
+        echo "timeshift"
+    elif command -v snapper &>/dev/null && sudo snapper -c root list &>/dev/null 2>&1; then
+        echo "snapper"
     else
-        echo -e "${RED}❌ Ошибка при удалении снэпшота${RESET}"
-        exit 1
+        echo "none"
     fi
-else
-    echo -e "${CYAN}Отменено${RESET}"
-fi
+}
+
+BACKEND=$(detect_backend)
+
+case "$BACKEND" in
+    timeshift)
+        if [ -z "$1" ]; then
+            echo -e "${YELLOW}Usage: snapshot-delete <snapshot_name>${RESET}"
+            echo -e "${CYAN}Example: snapshot-delete 2024-01-15_10-30-00${RESET}"
+            echo ""
+            echo -e "${CYAN}Available snapshots:${RESET}"
+            sudo timeshift --list
+            exit 1
+        fi
+
+        echo -e "${YELLOW}⚠️  Delete snapshot '$1'? (y/N)${RESET}"
+        read -r confirm
+        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+            if sudo timeshift --delete --snapshot "$1" --scripted; then
+                echo -e "${GREEN}✅ Snapshot '$1' deleted${RESET}"
+            else
+                echo -e "${RED}❌ Error deleting snapshot${RESET}"
+                exit 1
+            fi
+        else
+            echo -e "${CYAN}Cancelled${RESET}"
+        fi
+        ;;
+    snapper)
+        if [ -z "$1" ]; then
+            echo -e "${YELLOW}Usage: snapshot-delete <number>${RESET}"
+            echo -e "${CYAN}Example: snapshot-delete 5${RESET}"
+            echo ""
+            echo -e "${CYAN}Available snapshots:${RESET}"
+            sudo snapper -c root list
+            exit 1
+        fi
+
+        echo -e "${YELLOW}⚠️  Delete snapshot $1? (y/N)${RESET}"
+        read -r confirm
+        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+            if sudo snapper -c root delete "$1"; then
+                echo -e "${GREEN}✅ Snapshot $1 deleted${RESET}"
+            else
+                echo -e "${RED}❌ Error deleting snapshot${RESET}"
+                exit 1
+            fi
+        else
+            echo -e "${CYAN}Cancelled${RESET}"
+        fi
+        ;;
+    *)
+        echo -e "${RED}❌ No snapshot tool configured${RESET}"
+        echo -e "${YELLOW}Run ~/dotfiles/scripts/snapshot_setup.sh to set up snapshots${RESET}"
+        exit 1
+        ;;
+esac

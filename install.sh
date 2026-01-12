@@ -423,7 +423,7 @@ for script in snapshot-create snapshot-list snapshot-diff snapshot-delete snapsh
     fi
 done
 
-# ─── 📸 Snapshots (Btrfs + Snapper) ──────────────────────
+# ─── 📸 Snapshots (Timeshift for ext4, Snapper for Btrfs) ───
 source ~/dotfiles/scripts/snapshot_setup.sh
 setup_snapshots
 

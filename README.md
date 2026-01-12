@@ -11,7 +11,10 @@
 
 ## Snapshots
 
-Btrfs snapshot support via Snapper. Auto-snapshots on package updates, bootable from GRUB.
+System snapshot support for easy rollback:
 
-> requires btrfs root, skipped otherwise
+- **ext4/xfs/etc**: Timeshift with rsync (auto-snapshots on boot, daily, weekly, monthly)
+- **Btrfs**: Snapper with native snapshots (auto-snapshots on pacman, bootable from GRUB)
+
+Commands: `snapshot-create`, `snapshot-list`, `snapshot-delete`, `snapshot-rollback`
 

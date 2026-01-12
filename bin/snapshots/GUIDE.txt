@@ -1,21 +1,25 @@
 SNAPSHOT GUIDE
 ==============
 
-Btrfs snapshots via Snapper. Auto-snapshots on package updates, bootable from GRUB.
+System snapshots for easy rollback. Auto-detects filesystem:
+- ext4/xfs/etc: Uses Timeshift with rsync
+- Btrfs: Uses Snapper with native snapshots
 
 REQUIREMENTS
 ------------
-- Btrfs filesystem on root partition
-- Snapper installed (auto-installed by setup script)
+- Arch Linux
+- Root access (sudo)
+- For Timeshift: cronie for scheduled snapshots
+- For Snapper: Btrfs filesystem on root partition
 
 COMMANDS
 --------
 
   snapshot-create [description]   Create a manual snapshot
   snapshot-list                   List all snapshots
-  snapshot-diff <num1> <num2>     Compare changes between snapshots
-  snapshot-delete <num>           Delete a snapshot
-  snapshot-rollback               Show rollback instructions
+  snapshot-delete <name/num>      Delete a snapshot
+  snapshot-rollback               Show restore instructions
+  snapshot-diff <n1> <n2>         Compare snapshots (Snapper/Btrfs only)
 
 EXAMPLES
 --------
@@ -26,25 +30,52 @@ EXAMPLES
   # List all snapshots
   snapshot-list
 
-  # See what changed between snapshots 1 and 5
-  snapshot-diff 1 5
+  # Delete old snapshot (Timeshift uses names, Snapper uses numbers)
+  snapshot-delete 2024-01-15_10-30-00   # Timeshift
+  snapshot-delete 3                      # Snapper
 
-  # Delete old snapshot
-  snapshot-delete 3
+  # See what changed between snapshots (Snapper only)
+  snapshot-diff 1 5
 
 AUTO-SNAPSHOTS
 --------------
-- snap-pac: creates pre/post snapshots on every pacman transaction
-- timeline: hourly snapshots (5 hourly, 7 daily, 4 weekly, 6 monthly, 2 yearly)
 
-ROLLBACK
---------
-1. Reboot
-2. In GRUB menu select "Arch Linux snapshots"
-3. Pick the snapshot to boot into
-4. For permanent rollback, run snapshot-rollback for detailed instructions
+For ext4 (Timeshift):
+  - On boot (3 kept)
+  - Daily (5 kept)
+  - Weekly (3 kept)
+  - Monthly (2 kept)
+  - Before pacman updates (if timeshift-autosnap installed)
+
+For Btrfs (Snapper):
+  - Before/after every pacman update (snap-pac)
+  - Hourly timeline snapshots
+  - Bootable from GRUB menu
+
+RESTORE / ROLLBACK
+------------------
+
+Timeshift (ext4):
+  1. Run: sudo timeshift --restore
+  2. Select snapshot and confirm
+  3. Reboot after restore
+
+  From Live USB:
+  1. Boot Arch Live USB
+  2. Install timeshift: pacman -Sy timeshift
+  3. Run: sudo timeshift --restore
+
+Snapper (Btrfs):
+  1. Reboot
+  2. In GRUB menu select "Arch Linux snapshots"
+  3. Pick the snapshot to boot into
+  4. For permanent rollback, run snapshot-rollback for instructions
+
+GUI
+---
+  Timeshift: sudo timeshift-gtk
 
 TROUBLESHOOTING
 ---------------
 If commands don't work, make sure ~/.local/bin is in your PATH.
-If Snapper not configured, run: ~/dotfiles/scripts/snapshot_setup.sh
+If snapshots not configured, run: ~/dotfiles/scripts/snapshot_setup.sh
