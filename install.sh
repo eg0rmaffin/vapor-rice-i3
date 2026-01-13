@@ -154,6 +154,7 @@ deps=(
     	pavucontrol
     	sof-firmware
 	#utils
+	cbatticon #battery status icon in system tray
 	p7zip
 	qbittorrent
 	firejail #проверка подозрительных appImage
