@@ -113,6 +113,7 @@ deps=(
 	base-devel
 	i3-gaps
 	i3blocks
+	i3lock  # Screen locker for power-menu
 	alacritty
 	tmux
 	rofi
@@ -390,6 +391,13 @@ echo -e "${CYAN}🔧 Linking OSD scripts...${RESET}"
 mkdir -p ~/.local/bin
 ln -sf ~/dotfiles/scripts/osd/volume.sh ~/.local/bin/volume.sh
 echo -e "${GREEN}✅ volume.sh linked${RESET}"
+
+# ⚡ Power menu (Win95 vaporwave style)
+echo -e "${CYAN}⚡ Linking power-menu...${RESET}"
+mkdir -p ~/.config/rofi
+ln -sf ~/dotfiles/rofi/power-menu.rasi ~/.config/rofi/power-menu.rasi
+ln -sf ~/dotfiles/bin/power-menu.sh ~/.local/bin/power-menu.sh
+echo -e "${GREEN}✅ power-menu linked${RESET}"
 
 # ─── 🕰️ Настройка локального времени RTC ──────
 echo -e "${CYAN}🕰️ Настраиваем RTC в режиме localtime...${RESET}"
