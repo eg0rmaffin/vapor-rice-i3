@@ -3,17 +3,23 @@
  *  ⚡ Vaporwave Power Menu Theme (Win95 Style)
  *     A E S T H E T I C   R O F I
  *
+ *  Authentic Win95 shutdown dialog with vaporwave colors:
+ *    - Title bar: Hot pink (like Win95 blue but vaporwave)
+ *    - Background: Dark navy (Win95 gray → vaporwave navy)
+ *    - Buttons: 3D beveled effect
+ *    - Sharp corners: No rounded edges (authentic Win95)
+ *
  *  Color palette matches the vapor-rice-i3 theme:
  *    - Background: #1a1a2e (dark navy)
  *    - Foreground: #f8f8f2 (off-white)
- *    - Accent 1:   #ff79c6 (hot pink)
- *    - Accent 2:   #8be9fd (cyan)
- *    - Urgent:     #ff5555 (bright red)
+ *    - Accent 1:   #ff79c6 (hot pink - title bar)
+ *    - Accent 2:   #8be9fd (cyan - highlights)
+ *    - Win95 gray: #c0c0c0 (classic Win95 button gray)
  * ─────────────────────────────────────────────
  */
 
 * {
-    /* Vaporwave color palette */
+    /* Vaporwave color palette with Win95 influence */
     bg:             #1a1a2eee;
     bg-alt:         #282a36;
     fg:             #f8f8f2;
@@ -21,6 +27,12 @@
     cyan:           #8be9fd;
     purple:         #bd93f9;
     red:            #ff5555;
+
+    /* Win95 classic colors (vaporwave edition) */
+    win95-gray:     #404060;     /* Dark vaporwave gray for buttons */
+    win95-light:    #606080;     /* Light edge for 3D effect */
+    win95-dark:     #202040;     /* Dark edge for 3D effect */
+    title-bar:      @pink;       /* Pink instead of Win95 blue */
 
     /* Win95-inspired borders */
     border-color:   @cyan;
@@ -34,9 +46,9 @@ window {
     background-color: @bg;
     border:           3px solid;
     border-color:     @pink;
-    border-radius:    0px;  /* Sharp corners like Win95 */
+    border-radius:    0px;  /* Sharp corners like Win95 - IMPORTANT */
     padding:          0px;
-    width:            280px;
+    width:            320px; /* Slightly wider for Win95 text */
     location:         center;
     anchor:           center;
 
@@ -81,31 +93,33 @@ listview {
 }
 
 element {
-    background-color: @bg-alt;
+    background-color: @win95-gray;
     text-color:       @fg;
-    border:           2px solid;
-    border-color:     #44475a;
+    /* Win95 3D beveled button effect */
+    border:           2px;
+    border-color:     @win95-light @win95-dark @win95-dark @win95-light;
     padding:          10px 14px;
-    border-radius:    0px;
+    border-radius:    0px;  /* Sharp corners - authentic Win95 */
     cursor:           pointer;
 }
 
 element normal.normal {
-    background-color: @bg-alt;
+    background-color: @win95-gray;
     text-color:       @fg;
-    border-color:     #44475a;
+    border-color:     @win95-light @win95-dark @win95-dark @win95-light;
 }
 
 element selected.normal {
+    /* Selected = pressed button effect (inverted 3D) */
     background-color: @pink;
     text-color:       @bg;
-    border-color:     @cyan;
+    border-color:     @win95-dark @win95-light @win95-light @win95-dark;
 }
 
 element alternate.normal {
     background-color: @bg;
     text-color:       @fg;
-    border-color:     #44475a;
+    border-color:     @win95-light @win95-dark @win95-dark @win95-light;
 }
 
 element-text {
@@ -116,18 +130,19 @@ element-text {
     font:             "FiraCode Nerd Font 12";
 }
 
-/* Hover effect */
+/* Hover effect - Win95 style */
 element normal.active,
 element alternate.active {
     background-color: @purple;
     text-color:       @bg;
-    border-color:     @pink;
+    border-color:     @win95-light @win95-dark @win95-dark @win95-light;
 }
 
 element selected.active {
+    /* Active selected = pressed state */
     background-color: @cyan;
     text-color:       @bg;
-    border-color:     @pink;
+    border-color:     @win95-dark @win95-light @win95-light @win95-dark;
 }
 
 /* Message styling for confirmation dialogs */
