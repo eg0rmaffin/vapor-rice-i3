@@ -1,0 +1,136 @@
+/**
+ * 🌸 Vapor Rice Rofi Theme
+ * Vaporwave aesthetics with pink and cyan highlights
+ */
+
+configuration {
+    modi: "drun,run,window";
+    show-icons: true;
+    icon-theme: "chicago95";
+    display-drun: "🌸 Apps";
+    display-run: "⚡ Run";
+    display-window: "🪟 Windows";
+    drun-display-format: "{name}";
+    font: "Noto Sans 12";
+}
+
+* {
+    /* Vaporwave color palette */
+    bg: #1a1a2e;
+    bg-alt: #16213e;
+    fg: #f8f8f2;
+    fg-alt: #bfbfbf;
+
+    pink: #ff79c6;
+    cyan: #8be9fd;
+    purple: #bd93f9;
+
+    background-color: transparent;
+    text-color: @fg;
+}
+
+window {
+    transparency: "real";
+    background-color: @bg;
+    border: 3px;
+    border-color: @cyan;
+    border-radius: 12px;
+    width: 600px;
+    padding: 20px;
+}
+
+mainbox {
+    background-color: transparent;
+    spacing: 15px;
+    children: [inputbar, listview];
+}
+
+inputbar {
+    background-color: @bg-alt;
+    border: 2px;
+    border-color: @pink;
+    border-radius: 8px;
+    padding: 12px 16px;
+    spacing: 10px;
+    children: [prompt, entry];
+}
+
+prompt {
+    text-color: @pink;
+    font: "Noto Sans Bold 12";
+}
+
+entry {
+    placeholder: "Search applications...";
+    placeholder-color: @fg-alt;
+    text-color: @fg;
+}
+
+listview {
+    background-color: transparent;
+    lines: 8;
+    spacing: 5px;
+    scrollbar: true;
+}
+
+scrollbar {
+    background-color: @bg-alt;
+    handle-color: @cyan;
+    border-radius: 4px;
+    handle-width: 6px;
+    padding: 0 2px;
+}
+
+element {
+    background-color: transparent;
+    text-color: @fg;
+    border-radius: 6px;
+    padding: 8px 12px;
+    spacing: 10px;
+}
+
+element normal.normal {
+    background-color: transparent;
+    text-color: @fg;
+}
+
+element normal.active {
+    background-color: @bg-alt;
+    text-color: @cyan;
+}
+
+element selected.normal {
+    background-color: @pink;
+    text-color: @bg;
+    border: 2px;
+    border-color: @cyan;
+}
+
+element selected.active {
+    background-color: @cyan;
+    text-color: @bg;
+    border: 2px;
+    border-color: @pink;
+}
+
+element-icon {
+    size: 32px;
+    margin: 0 8px 0 0;
+}
+
+element-text {
+    text-color: inherit;
+    vertical-align: 0.5;
+}
+
+message {
+    background-color: @bg-alt;
+    border: 2px;
+    border-color: @purple;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+textbox {
+    text-color: @fg;
+}
