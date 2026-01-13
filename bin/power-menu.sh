@@ -46,7 +46,7 @@ for item in "${menu_order[@]}"; do
 done
 
 # Show rofi menu - Win95 style title
-chosen=$(echo -e "$menu" | rofi -dmenu -i -p "Shut Down Windows" -theme "$THEME" 2>/dev/null)
+chosen=$(echo -e "$menu" | rofi -dmenu -i -p "Power Menu" -theme "$THEME" 2>/dev/null)
 
 # If rofi failed or no selection, exit
 [ -z "$chosen" ] && exit 0
