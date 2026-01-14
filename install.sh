@@ -419,8 +419,25 @@ echo -e "${GREEN}✅ RTC теперь работает в localtime${RESET}"
 
 # ────── Раскладка alt shift ──────────────────────────
 
-echo -e "${CYAN}🎹 Применяем переключение раскладки Alt+Shift...${RESET}"
-setxkbmap -layout us,ru -option grp:alt_shift_toggle
+echo -e "${CYAN}🎹 Проверяем раскладку клавиатуры...${RESET}"
+
+# Check if we're in X session
+if [ -n "$DISPLAY" ]; then
+    # Get current layout configuration
+    current_layout=$(setxkbmap -query 2>/dev/null | grep layout | awk '{print $2}')
+    current_options=$(setxkbmap -query 2>/dev/null | grep options | awk '{print $2}')
+
+    # Check if us,ru layout and alt_shift_toggle are already configured
+    if [[ "$current_layout" == "us,ru" ]] && [[ "$current_options" == *"grp:alt_shift_toggle"* ]]; then
+        echo -e "${GREEN}✅ Раскладка уже настроена (us,ru + Alt+Shift)${RESET}"
+    else
+        echo -e "${CYAN}🎹 Применяем переключение раскладки Alt+Shift...${RESET}"
+        setxkbmap -layout us,ru -option grp:alt_shift_toggle
+        echo -e "${GREEN}✅ Раскладка настроена${RESET}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  Пропускаем настройку раскладки — нет X сессии${RESET}"
+fi
 
 # ─────────────────────────────────────────────
 source ~/dotfiles/scripts/audio_setup.sh
