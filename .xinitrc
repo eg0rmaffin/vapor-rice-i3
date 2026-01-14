@@ -4,6 +4,14 @@ if [ -n "$TOUCHPAD_ID" ]; then
     xinput set-prop "$TOUCHPAD_ID" "libinput Natural Scrolling Enabled" 1
 fi
 
+# ─── NVIDIA GPU Detection and Environment ──────
+if lspci | grep -i 'vga\|3d\|display' | grep -i 'nvidia' &>/dev/null; then
+    # Включаем аппаратное ускорение для NVIDIA
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+    export __GL_SHADER_DISK_CACHE=1
+    export __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
+fi
+
 export GTK_THEME=catppuccin-mocha-mauve-standard+default
 export GTK_ICON_THEME=Chicago95
 export LANG=en_US.UTF-8
