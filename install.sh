@@ -288,6 +288,11 @@ echo -e "${CYAN}🔧 Linking Vim config...${RESET}"
 ln -sf ~/dotfiles/vim/.vimrc ~/.vimrc
 echo -e "${GREEN}✅ Vim config linked${RESET}"
 
+# 🧩 Git config (vim as editor)
+echo -e "${CYAN}🔧 Linking Git config...${RESET}"
+ln -sf ~/dotfiles/git/.gitconfig ~/.gitconfig
+echo -e "${GREEN}✅ Git config linked${RESET}"
+
 # 🧩 Rofi config
 echo -e "${CYAN}🔧 Linking Rofi config...${RESET}"
 mkdir -p ~/.config/rofi
