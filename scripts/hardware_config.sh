@@ -55,35 +55,9 @@ EOF
         fi
     fi
 
-    # NVIDIA GPU: создание конфигурации Xorg
+    # NVIDIA GPU: автоматическая конфигурация отключена
     if lspci | grep -i 'vga\|3d\|display' | grep -i 'nvidia' &>/dev/null; then
-        NVIDIA_CONF="$XORG_CONF_DIR/20-nvidia.conf"
-        if [ ! -f "$NVIDIA_CONF" ]; then
-            echo -e "${CYAN}🔧 Создаем конфигурацию для NVIDIA GPU...${RESET}"
-            sudo tee "$NVIDIA_CONF" > /dev/null <<EOF
-Section "Device"
-    Identifier     "NVIDIA Graphics"
-    Driver         "nvidia"
-    VendorName     "NVIDIA Corporation"
-    # Параметры для улучшения производительности
-    Option         "NoLogo" "true"
-    Option         "TripleBuffer" "true"
-    # Включаем аппаратное ускорение
-    Option         "AccelMethod" "glamor"
-    Option         "DRI" "3"
-EndSection
-
-Section "Screen"
-    Identifier     "NVIDIA Screen"
-    Device         "NVIDIA Graphics"
-    # Оптимизация для устранения разрывов изображения
-    Option         "metamodes" "nvidia-auto-select +0+0 {ForceFullCompositionPipeline=On}"
-EndSection
-EOF
-            echo -e "${GREEN}✅ Конфигурация NVIDIA GPU создана в $NVIDIA_CONF${RESET}"
-        else
-            echo -e "${GREEN}✅ Конфигурация NVIDIA GPU уже существует${RESET}"
-        fi
+        echo -e "${YELLOW}⚠️ Обнаружена NVIDIA GPU. Автоматическая конфигурация NVIDIA отключена.${RESET}"
     fi
 
     # AMD GPU (только если нет гибридной графики)
