@@ -97,6 +97,7 @@ if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAY
         echo -e "${YELLOW}⚠️ Закешированные зеркала не работают, обновляем...${RESET}"
         update_mirrors
     fi
+    bind #dig для сетевых тестов
 else
     update_mirrors
 fi
@@ -174,6 +175,7 @@ deps=(
     	swaybg             # фон
     	xdg-desktop-portal
         xdg-desktop-portal-wlr
+        xdg-desktop-portal-gtk #это x вещь для скриншера вроде
 )
 
 # было: явный for-цикл; стало: вызов хелпера
@@ -377,6 +379,14 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
         echo -e "${YELLOW}⚠️ Служба $service не найдена, пропускаем${RESET}"
     fi
 done
+
+
+# ─── 🎨 Appearance policy (dark mode for browsers / portal / electron) ───
+if command -v gsettings >/dev/null && [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
+  gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+else
+  echo -e "${YELLOW}⚠️ Skipping gsettings (no DBus session)${RESET}"
+fi
 
 # ─────────────────────────────────────────────
 # 🔵 Bluetooth

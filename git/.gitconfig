@@ -12,3 +12,6 @@
 
 [mergetool]
     prompt = false
+
+[include]
+    path = ~/.gitconfig.local

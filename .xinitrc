@@ -9,6 +9,11 @@ export GTK_ICON_THEME=Chicago95
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
+# ─── XDG desktop context ───
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=i3
+export XDG_SESSION_DESKTOP=i3
+
 export PATH="$HOME/.local/bin:$PATH"
 eval "$(dbus-launch --sh-syntax --exit-with-session)"
 
