@@ -20,6 +20,13 @@ eval "$(dbus-launch --sh-syntax --exit-with-session)"
 # 🎹 Клавиатура
 setxkbmap -layout us,ru -option grp:alt_shift_toggle
 
+# ─── Disable default X11 DPMS/screensaver ───
+# xidlehook will manage idle behavior with media-aware detection
+# This prevents screen blanking during video/audio playback
+xset s off          # Disable screensaver
+xset s noblank      # Disable screen blanking
+xset -dpms          # Disable DPMS (Display Power Management Signaling)
+
 # 🔊 Ретро-звук при старте X
 paplay ~/dotfiles/sounds/startup.wav 2>/dev/null &
 

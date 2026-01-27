@@ -198,6 +198,7 @@ fi
 aur_pkgs=(
     xkb-switch
     light
+    xidlehook #media-aware idle detection (prevents screen blanking during video/audio)
     catppuccin-gtk-theme-mocha
     chicago95-icon-theme
     shadowsocks-rust #sslocal для аутлайн протокола впн
@@ -459,6 +460,10 @@ setup_power_management
 
 source ~/dotfiles/scripts/hardware_config.sh
 configure_hardware
+
+# ─── Media-aware idle inhibit (prevents screen blanking during playback) ───
+source ~/dotfiles/scripts/idle_inhibit.sh
+setup_idle_inhibit
 
 # ─── 📸 Snapshot helper scripts ──────────────────────────
 echo -e "${CYAN}🔧 Linking snapshot scripts...${RESET}"
