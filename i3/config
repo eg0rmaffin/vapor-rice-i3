@@ -133,6 +133,9 @@ include $HOME/.config/i3/includes/multimedia.conf
 # Media-aware idle inhibit (prevents screen blanking during video/audio playback)
 include ~/dotfiles/i3/includes/idle.conf
 
+# Keyboard backlight configuration for laptops
+include ~/dotfiles/i3/includes/kbd-backlight.conf
+
 #--------------------------------------
 
 # Иконка Wi-Fi в трее
