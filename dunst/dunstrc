@@ -1,22 +1,39 @@
 [global]
-    font = Noto Sans 10
-    padding = 10
+    # ─── Layout Settings ─────────────────────────────────────
+    # NOTE: These settings are global-only in dunst and cannot
+    # be overridden per-notification in rules. See dunst(5).
+    #
+    # Bigger font for better visibility (was: Noto Sans 10)
+    font = Noto Sans Bold 14
+    # Larger padding for more prominent panels (was: 10)
+    padding = 16
+    horizontal_padding = 20
     corner_radius = 14
     transparency = 15
-    frame_width = 2
+    # Thicker frame for emphasis (was: 2)
+    frame_width = 3
     frame_color = "#8be9fd"
     background = "#1a1a2e"
     foreground = "#f8f8f2"
     highlight = "#ff79c6"
     separator_color = "#8be9fd"
+    # ─── Progress Bar (global-only) ──────────────────────────
+    # Wider, taller progress bar for OSD visibility
     progress_bar = true
-    progress_bar_height = 8
-    progress_bar_frame_width = 1
-    progress_bar_min_width = 180
-    progress_bar_max_width = 180
+    progress_bar_height = 14
+    progress_bar_frame_width = 2
+    progress_bar_min_width = 360
+    progress_bar_max_width = 360
+    # ─── Notification Width ─────────────────────────────────
+    # Wider notification window for better text readability
+    # (0, 400) means dynamic width from 0 to max 400px
+    width = (0, 400)
+    # ─── Other Global Settings ───────────────────────────────
     icon_position = left
     origin = top-right
-    offset = (20,20)
+    # Y-offset increased to 50px to prevent overlap with i3bar at top
+    # (i3bar ~24px + outer gaps 10px = ~34px, using 50px for clear separation)
+    offset = (20, 50)
     monitor = 0
     follow = mouse
     indicate_hidden = yes
@@ -26,13 +43,25 @@
 # ─── Vaporwave OSD Panels ─────────────────────────────
 # All OSD notifications share consistent vaporwave styling
 # Each app-name gets its own rule for easy customization
+# NOTE: Only color settings can be overridden in rules.
+# Layout settings (font, padding, progress_bar_*) are in [global].
 
 [volume-osd]
     appname = "volume-osd"
+    # Vaporwave colors - pink highlight on dark background
+    background = "#1a1a2eee"
+    foreground = "#f8f8f2"
+    frame_color = "#ff79c6"
+    highlight = "#ff79c6"
+
+# ─── Vaporwave Power Menu (Win95 Style) ───────────────
+[power-menu]
+    appname = "power-menu"
     background = "#1a1a2e"
     foreground = "#f8f8f2"
-    frame_color = "#8be9fd"
-    highlight = "#ff79c6"
+    frame_color = "#ff79c6"
+    highlight = "#8be9fd"
+    timeout = 3
 
 [brightness-osd]
     appname = "brightness-osd"

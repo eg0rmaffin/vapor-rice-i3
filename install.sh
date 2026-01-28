@@ -97,6 +97,7 @@ if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAY
         echo -e "${YELLOW}⚠️ Закешированные зеркала не работают, обновляем...${RESET}"
         update_mirrors
     fi
+    bind #dig для сетевых тестов
 else
     update_mirrors
 fi
@@ -113,6 +114,7 @@ deps=(
 	base-devel
 	i3-gaps
 	i3blocks
+	i3lock  # Screen locker for power-menu
 	alacritty
 	tmux
 	rofi
@@ -128,7 +130,6 @@ deps=(
 	noto-fonts-extra
 	neofetch
 	thunar
-	thunar-archive-plugin
 	thunar-volman
 	dbus
 	polkit
@@ -154,6 +155,7 @@ deps=(
     	pavucontrol
     	sof-firmware
 	#utils
+	cbatticon #battery status icon in system tray
 	p7zip
 	qbittorrent
 	firejail #проверка подозрительных appImage
@@ -173,6 +175,7 @@ deps=(
     	swaybg             # фон
     	xdg-desktop-portal
         xdg-desktop-portal-wlr
+        xdg-desktop-portal-gtk #это x вещь для скриншера вроде
 )
 
 # было: явный for-цикл; стало: вызов хелпера
@@ -195,6 +198,7 @@ fi
 aur_pkgs=(
     xkb-switch
     light
+    xidlehook #media-aware idle detection (prevents screen blanking during video/audio)
     catppuccin-gtk-theme-mocha
     chicago95-icon-theme
     shadowsocks-rust #sslocal для аутлайн протокола впн
@@ -262,6 +266,29 @@ echo -e "${GREEN}✅ picom config linked${RESET}"
 echo -e "${CYAN}🔧 Linking GTK 3.0 settings...${RESET}"
 mkdir -p ~/.config/gtk-3.0
 ln -sf ~/dotfiles/gtk-3.0/settings.ini ~/.config/gtk-3.0/settings.ini
+
+# 🧩 Generate Thunar bookmarks for popular directories
+echo -e "${CYAN}🔧 Generating Thunar bookmarks...${RESET}"
+# Standard XDG user directories
+BOOKMARK_DIRS=(
+    "Downloads"
+    "Documents"
+    "Pictures"
+    "Music"
+    "Videos"
+    "Desktop"
+)
+
+# Create bookmarks file with only existing directories
+> ~/.config/gtk-3.0/bookmarks  # Clear/create file
+for dir in "${BOOKMARK_DIRS[@]}"; do
+    if [ -d "$HOME/$dir" ]; then
+        echo "file://$HOME/$dir $dir" >> ~/.config/gtk-3.0/bookmarks
+        echo -e "  ${GREEN}✅ Added bookmark: $dir${RESET}"
+    else
+        echo -e "  ${YELLOW}⚠️ Skipped (not found): $dir${RESET}"
+    fi
+done
 echo -e "${GREEN}✅ GTK 3.0 settings linked${RESET}"
 
 # 🧩 Alacritty
@@ -282,10 +309,35 @@ mkdir -p ~/.config/i3blocks
 ln -sf ~/dotfiles/i3blocks/config ~/.config/i3blocks/config
 echo -e "${GREEN}✅ i3blocks config linked${RESET}"
 
+# 🧩 Thunar custom actions for archive handling
+# Uses external scripts instead of inline commands for robust special character handling
+echo -e "${CYAN}🔧 Setting up Thunar custom actions...${RESET}"
+mkdir -p ~/.config/Thunar
+ln -sf ~/dotfiles/thunar/uca.xml ~/.config/Thunar/uca.xml
+
+# Link Thunar archive helper scripts
+mkdir -p ~/.local/bin
+ln -sf ~/dotfiles/bin/thunar-extract-here.sh ~/.local/bin/thunar-extract-here.sh
+ln -sf ~/dotfiles/bin/thunar-extract-to-folder.sh ~/.local/bin/thunar-extract-to-folder.sh
+ln -sf ~/dotfiles/bin/thunar-compress-zip.sh ~/.local/bin/thunar-compress-zip.sh
+ln -sf ~/dotfiles/bin/thunar-compress-7z.sh ~/.local/bin/thunar-compress-7z.sh
+echo -e "${GREEN}✅ Thunar custom actions linked${RESET}"
+
 # 🧩 Vim config
 echo -e "${CYAN}🔧 Linking Vim config...${RESET}"
 ln -sf ~/dotfiles/vim/.vimrc ~/.vimrc
 echo -e "${GREEN}✅ Vim config linked${RESET}"
+
+# 🧩 Git config (vim as editor)
+echo -e "${CYAN}🔧 Linking Git config...${RESET}"
+ln -sf ~/dotfiles/git/.gitconfig ~/.gitconfig
+echo -e "${GREEN}✅ Git config linked${RESET}"
+
+# 🧩 Rofi config
+echo -e "${CYAN}🔧 Linking Rofi config...${RESET}"
+mkdir -p ~/.config/rofi
+ln -sf ~/dotfiles/rofi/config.rasi ~/.config/rofi/config.rasi
+echo -e "${GREEN}✅ Rofi config linked${RESET}"
 
 # 🟣 Discord Proxy
 echo -e "${CYAN}🔧 Linking Discord Proxy...${RESET}"
@@ -366,6 +418,14 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
     fi
 done
 
+
+# ─── 🎨 Appearance policy (dark mode for browsers / portal / electron) ───
+if command -v gsettings >/dev/null && [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
+  gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+else
+  echo -e "${YELLOW}⚠️ Skipping gsettings (no DBus session)${RESET}"
+fi
+
 # ─────────────────────────────────────────────
 # 🔵 Bluetooth
 echo -e "${CYAN}🔧 Настраиваем Bluetooth...${RESET}"
@@ -395,6 +455,34 @@ ln -sf ~/dotfiles/scripts/osd/media.sh ~/.local/bin/media-osd.sh
 ln -sf ~/dotfiles/scripts/osd/microphone.sh ~/.local/bin/microphone-osd.sh
 echo -e "${GREEN}✅ OSD scripts linked (volume, brightness, media, microphone)${RESET}"
 
+# ⚡ Power menu (Win95 vaporwave style)
+echo -e "${CYAN}⚡ Linking power-menu...${RESET}"
+mkdir -p ~/.config/rofi
+ln -sf ~/dotfiles/rofi/power-menu.rasi ~/.config/rofi/power-menu.rasi
+ln -sf ~/dotfiles/bin/power-menu.sh ~/.local/bin/power-menu.sh
+echo -e "${GREEN}✅ power-menu linked${RESET}"
+
+# ─── 💡 Keyboard Backlight Support ──────
+echo -e "${CYAN}💡 Setting up keyboard backlight support...${RESET}"
+mkdir -p ~/.local/bin
+ln -sf ~/dotfiles/bin/kbd-backlight.sh ~/.local/bin/kbd-backlight.sh
+echo -e "${GREEN}✅ kbd-backlight.sh linked${RESET}"
+
+# Create udev rule for keyboard backlight permissions
+KBD_UDEV_RULE="/etc/udev/rules.d/90-kbd-backlight.rules"
+if [ ! -f "$KBD_UDEV_RULE" ]; then
+    echo -e "${CYAN}🔧 Creating udev rule for keyboard backlight...${RESET}"
+    sudo tee "$KBD_UDEV_RULE" > /dev/null <<'EOF'
+# Allow users in video group to control keyboard backlight
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="*kbd*", RUN+="/bin/chmod g+w /sys/class/leds/%k/brightness", RUN+="/bin/chgrp video /sys/class/leds/%k/brightness"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="*kbd*", RUN+="/bin/chmod g+w /sys/class/leds/%k/brightness_hw_changed", RUN+="/bin/chgrp video /sys/class/leds/%k/brightness_hw_changed"
+EOF
+    sudo udevadm control --reload-rules
+    echo -e "${GREEN}✅ Keyboard backlight udev rule created${RESET}"
+else
+    echo -e "${GREEN}✅ Keyboard backlight udev rule already exists${RESET}"
+fi
+
 # ─── 🕰️ Настройка локального времени RTC ──────
 echo -e "${CYAN}🕰️ Настраиваем RTC в режиме localtime...${RESET}"
 sudo timedatectl set-local-rtc 1 --adjust-system-clock
@@ -402,8 +490,25 @@ echo -e "${GREEN}✅ RTC теперь работает в localtime${RESET}"
 
 # ────── Раскладка alt shift ──────────────────────────
 
-echo -e "${CYAN}🎹 Применяем переключение раскладки Alt+Shift...${RESET}"
-setxkbmap -layout us,ru -option grp:alt_shift_toggle
+echo -e "${CYAN}🎹 Проверяем раскладку клавиатуры...${RESET}"
+
+# Check if we're in X session
+if [ -n "$DISPLAY" ]; then
+    # Get current layout configuration
+    current_layout=$(setxkbmap -query 2>/dev/null | grep layout | awk '{print $2}')
+    current_options=$(setxkbmap -query 2>/dev/null | grep options | awk '{print $2}')
+
+    # Check if us,ru layout and alt_shift_toggle are already configured
+    if [[ "$current_layout" == "us,ru" ]] && [[ "$current_options" == *"grp:alt_shift_toggle"* ]]; then
+        echo -e "${GREEN}✅ Раскладка уже настроена (us,ru + Alt+Shift)${RESET}"
+    else
+        echo -e "${CYAN}🎹 Применяем переключение раскладки Alt+Shift...${RESET}"
+        setxkbmap -layout us,ru -option grp:alt_shift_toggle
+        echo -e "${GREEN}✅ Раскладка настроена${RESET}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  Пропускаем настройку раскладки — нет X сессии${RESET}"
+fi
 
 # ─────────────────────────────────────────────
 source ~/dotfiles/scripts/audio_setup.sh
@@ -418,6 +523,10 @@ setup_power_management
 source ~/dotfiles/scripts/hardware_config.sh
 configure_hardware
 
+# ─── Media-aware idle inhibit (prevents screen blanking during playback) ───
+source ~/dotfiles/scripts/idle_inhibit.sh
+setup_idle_inhibit
+
 # ─── 📸 Snapshot helper scripts ──────────────────────────
 echo -e "${CYAN}🔧 Linking snapshot scripts...${RESET}"
 mkdir -p ~/.local/bin
@@ -428,7 +537,7 @@ for script in snapshot-create snapshot-list snapshot-diff snapshot-delete snapsh
     fi
 done
 
-# ─── 📸 Snapshots (Btrfs + Snapper) ──────────────────────
+# ─── 📸 Snapshots (Timeshift for ext4, Snapper for Btrfs) ───
 source ~/dotfiles/scripts/snapshot_setup.sh
 setup_snapshots
 
