@@ -266,6 +266,29 @@ echo -e "${GREEN}✅ picom config linked${RESET}"
 echo -e "${CYAN}🔧 Linking GTK 3.0 settings...${RESET}"
 mkdir -p ~/.config/gtk-3.0
 ln -sf ~/dotfiles/gtk-3.0/settings.ini ~/.config/gtk-3.0/settings.ini
+
+# 🧩 Generate Thunar bookmarks for popular directories
+echo -e "${CYAN}🔧 Generating Thunar bookmarks...${RESET}"
+# Standard XDG user directories
+BOOKMARK_DIRS=(
+    "Downloads"
+    "Documents"
+    "Pictures"
+    "Music"
+    "Videos"
+    "Desktop"
+)
+
+# Create bookmarks file with only existing directories
+> ~/.config/gtk-3.0/bookmarks  # Clear/create file
+for dir in "${BOOKMARK_DIRS[@]}"; do
+    if [ -d "$HOME/$dir" ]; then
+        echo "file://$HOME/$dir $dir" >> ~/.config/gtk-3.0/bookmarks
+        echo -e "  ${GREEN}✅ Added bookmark: $dir${RESET}"
+    else
+        echo -e "  ${YELLOW}⚠️ Skipped (not found): $dir${RESET}"
+    fi
+done
 echo -e "${GREEN}✅ GTK 3.0 settings linked${RESET}"
 
 # 🧩 Alacritty
