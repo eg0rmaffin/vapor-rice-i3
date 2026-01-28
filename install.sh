@@ -309,10 +309,17 @@ ln -sf ~/dotfiles/i3blocks/config ~/.config/i3blocks/config
 echo -e "${GREEN}✅ i3blocks config linked${RESET}"
 
 # 🧩 Thunar custom actions for archive handling
-# Uses existing CLI tools (p7zip, unzip, tar) instead of thunar-archive-plugin
+# Uses external scripts instead of inline commands for robust special character handling
 echo -e "${CYAN}🔧 Setting up Thunar custom actions...${RESET}"
 mkdir -p ~/.config/Thunar
 ln -sf ~/dotfiles/thunar/uca.xml ~/.config/Thunar/uca.xml
+
+# Link Thunar archive helper scripts
+mkdir -p ~/.local/bin
+ln -sf ~/dotfiles/bin/thunar-extract-here.sh ~/.local/bin/thunar-extract-here.sh
+ln -sf ~/dotfiles/bin/thunar-extract-to-folder.sh ~/.local/bin/thunar-extract-to-folder.sh
+ln -sf ~/dotfiles/bin/thunar-compress-zip.sh ~/.local/bin/thunar-compress-zip.sh
+ln -sf ~/dotfiles/bin/thunar-compress-7z.sh ~/.local/bin/thunar-compress-7z.sh
 echo -e "${GREEN}✅ Thunar custom actions linked${RESET}"
 
 # 🧩 Vim config
