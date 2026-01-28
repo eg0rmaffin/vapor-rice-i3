@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+	<action>
+		<icon>package-x-generic</icon>
+		<name>Extract Here</name>
+		<unique-id>1704067200-extract-here</unique-id>
+		<command>cd %d &amp;&amp; case &quot;%f&quot; in *.zip) unzip -o &quot;%f&quot;;; *.tar.gz|*.tgz) tar -xzf &quot;%f&quot;;; *.tar.bz2|*.tbz2) tar -xjf &quot;%f&quot;;; *.tar.xz|*.txz) tar -xJf &quot;%f&quot;;; *.tar) tar -xf &quot;%f&quot;;; *.7z|*.rar) 7z x &quot;%f&quot;;; *) notify-send &quot;Extract&quot; &quot;Unsupported archive format&quot;;; esac</command>
+		<description>Extract archive contents to current directory</description>
+		<patterns>*.zip;*.tar;*.tar.gz;*.tgz;*.tar.bz2;*.tbz2;*.tar.xz;*.txz;*.7z;*.rar</patterns>
+		<other-files/>
+		<directories/>
+	</action>
+	<action>
+		<icon>folder-new</icon>
+		<name>Extract to Folder</name>
+		<unique-id>1704067201-extract-to-folder</unique-id>
+		<command>cd %d &amp;&amp; name=&quot;%n&quot; &amp;&amp; name=&quot;${name%%.*}&quot; &amp;&amp; mkdir -p &quot;$name&quot; &amp;&amp; case &quot;%f&quot; in *.zip) unzip -o &quot;%f&quot; -d &quot;$name&quot;;; *.tar.gz|*.tgz) tar -xzf &quot;%f&quot; -C &quot;$name&quot;;; *.tar.bz2|*.tbz2) tar -xjf &quot;%f&quot; -C &quot;$name&quot;;; *.tar.xz|*.txz) tar -xJf &quot;%f&quot; -C &quot;$name&quot;;; *.tar) tar -xf &quot;%f&quot; -C &quot;$name&quot;;; *.7z|*.rar) 7z x &quot;%f&quot; -o&quot;$name&quot;;; esac</command>
+		<description>Extract archive to a new folder named after the archive</description>
+		<patterns>*.zip;*.tar;*.tar.gz;*.tgz;*.tar.bz2;*.tbz2;*.tar.xz;*.txz;*.7z;*.rar</patterns>
+		<other-files/>
+		<directories/>
+	</action>
+	<action>
+		<icon>package-x-generic</icon>
+		<name>Compress to ZIP</name>
+		<unique-id>1704067202-compress-zip</unique-id>
+		<command>cd %d &amp;&amp; zip -r &quot;%n.zip&quot; %N</command>
+		<description>Create ZIP archive from selected files</description>
+		<patterns>*</patterns>
+		<other-files/>
+		<directories/>
+	</action>
+	<action>
+		<icon>package-x-generic</icon>
+		<name>Compress to 7z</name>
+		<unique-id>1704067203-compress-7z</unique-id>
+		<command>cd %d &amp;&amp; 7z a &quot;%n.7z&quot; %N</command>
+		<description>Create 7z archive from selected files</description>
+		<patterns>*</patterns>
+		<other-files/>
+		<directories/>
+	</action>
+</actions>

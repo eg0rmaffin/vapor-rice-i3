@@ -130,7 +130,6 @@ deps=(
 	noto-fonts-extra
 	neofetch
 	thunar
-	thunar-archive-plugin
 	thunar-volman
 	dbus
 	polkit
@@ -308,6 +307,13 @@ echo -e "${CYAN}🔧 Linking i3blocks config...${RESET}"
 mkdir -p ~/.config/i3blocks
 ln -sf ~/dotfiles/i3blocks/config ~/.config/i3blocks/config
 echo -e "${GREEN}✅ i3blocks config linked${RESET}"
+
+# 🧩 Thunar custom actions for archive handling
+# Uses existing CLI tools (p7zip, unzip, tar) instead of thunar-archive-plugin
+echo -e "${CYAN}🔧 Setting up Thunar custom actions...${RESET}"
+mkdir -p ~/.config/Thunar
+ln -sf ~/dotfiles/thunar/uca.xml ~/.config/Thunar/uca.xml
+echo -e "${GREEN}✅ Thunar custom actions linked${RESET}"
 
 # 🧩 Vim config
 echo -e "${CYAN}🔧 Linking Vim config...${RESET}"
