@@ -445,15 +445,13 @@ echo -e "${GREEN}✅ dunst config linked${RESET}"
 
 systemctl --user enable --now dunst.service 2>/dev/null || true
 
-# 🔗 OSD scripts (dunst panel support for volume, brightness, media, mic)
+# 🔗 OSD scripts (dunst panel support for volume and keyboard backlight)
 echo -e "${CYAN}🔧 Linking OSD scripts...${RESET}"
 mkdir -p ~/.local/bin
 ln -sf ~/dotfiles/scripts/osd/osd-panel.sh ~/.local/bin/osd-panel.sh
 ln -sf ~/dotfiles/scripts/osd/volume.sh ~/.local/bin/volume.sh
-ln -sf ~/dotfiles/scripts/osd/brightness.sh ~/.local/bin/brightness-osd.sh
-ln -sf ~/dotfiles/scripts/osd/media.sh ~/.local/bin/media-osd.sh
-ln -sf ~/dotfiles/scripts/osd/microphone.sh ~/.local/bin/microphone-osd.sh
-echo -e "${GREEN}✅ OSD scripts linked (volume, brightness, media, microphone)${RESET}"
+ln -sf ~/dotfiles/scripts/osd/kbd-backlight.sh ~/.local/bin/kbd-backlight-osd.sh
+echo -e "${GREEN}✅ OSD scripts linked (volume, keyboard backlight)${RESET}"
 
 # ⚡ Power menu (Win95 vaporwave style)
 echo -e "${CYAN}⚡ Linking power-menu...${RESET}"

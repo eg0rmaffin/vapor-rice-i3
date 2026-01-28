@@ -63,23 +63,9 @@
     highlight = "#8be9fd"
     timeout = 3
 
-[brightness-osd]
-    appname = "brightness-osd"
-    background = "#1a1a2e"
+[kbd-backlight-osd]
+    appname = "kbd-backlight-osd"
+    background = "#1a1a2eee"
     foreground = "#f8f8f2"
     frame_color = "#f1fa8c"
     highlight = "#ffb86c"
-
-[media-osd]
-    appname = "media-osd"
-    background = "#1a1a2e"
-    foreground = "#f8f8f2"
-    frame_color = "#bd93f9"
-    highlight = "#ff79c6"
-
-[mic-osd]
-    appname = "mic-osd"
-    background = "#1a1a2e"
-    foreground = "#f8f8f2"
-    frame_color = "#50fa7b"
-    highlight = "#ff5555"
