@@ -40,9 +40,12 @@
     word_wrap = yes
     sticky_history = yes
 
-# ─── Vaporwave Volume OSD ─────────────────────────────
+# ─── Vaporwave OSD Panels ─────────────────────────────
+# All OSD notifications share consistent vaporwave styling
+# Each app-name gets its own rule for easy customization
 # NOTE: Only color settings can be overridden in rules.
 # Layout settings (font, padding, progress_bar_*) are in [global].
+
 [volume-osd]
     appname = "volume-osd"
     # Vaporwave colors - pink highlight on dark background
@@ -59,3 +62,10 @@
     frame_color = "#ff79c6"
     highlight = "#8be9fd"
     timeout = 3
+
+[kbd-backlight-osd]
+    appname = "kbd-backlight-osd"
+    background = "#1a1a2eee"
+    foreground = "#f8f8f2"
+    frame_color = "#f1fa8c"
+    highlight = "#ffb86c"

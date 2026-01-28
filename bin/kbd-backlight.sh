@@ -106,6 +106,14 @@ get_next_level() {
     echo "${levels[$next_idx]}"
 }
 
+# OSD notification helper
+show_osd() {
+    local osd_script="$HOME/.local/bin/kbd-backlight-osd.sh"
+    if [ -x "$osd_script" ]; then
+        "$osd_script"
+    fi
+}
+
 case "$1" in
     up)
         NEW=$((CURRENT + STEP))
@@ -113,6 +121,7 @@ case "$1" in
             NEW=$MAX_BRIGHTNESS
         fi
         echo "$NEW" > "$BRIGHTNESS_FILE"
+        show_osd
         ;;
     down)
         NEW=$((CURRENT - STEP))
@@ -120,6 +129,7 @@ case "$1" in
             NEW=0
         fi
         echo "$NEW" > "$BRIGHTNESS_FILE"
+        show_osd
         ;;
     toggle)
         # Toggle between 0 and max
@@ -128,18 +138,22 @@ case "$1" in
         else
             echo "$MAX_BRIGHTNESS" > "$BRIGHTNESS_FILE"
         fi
+        show_osd
         ;;
     cycle)
         # Cycle through declaratively detected brightness levels
         # off -> low -> high -> off (number of levels depends on hardware)
         NEW=$(get_next_level "$CURRENT")
         echo "$NEW" > "$BRIGHTNESS_FILE"
+        show_osd
         ;;
     max)
         echo "$MAX_BRIGHTNESS" > "$BRIGHTNESS_FILE"
+        show_osd
         ;;
     off)
         echo "0" > "$BRIGHTNESS_FILE"
+        show_osd
         ;;
     get)
         echo "$CURRENT"

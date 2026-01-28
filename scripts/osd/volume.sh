@@ -6,18 +6,15 @@
 #    Stack: pamixer + dunst (libnotify)
 # ─────────────────────────────────────────────
 
+# Source OSD panel library
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+source "$SCRIPT_DIR/osd-panel.sh"
+
 vol=$(pamixer --get-volume)
 muted=$(pamixer --get-mute)
 
-# replace-id позволяет dunst обновлять плашку вместо спама
-REPLACE_ID=420
-
 if [ "$muted" = "true" ]; then
-  notify-send -u low -t 1200 --replace-id=$REPLACE_ID \
-    --hint=int:value:0 --app-name="volume-osd" \
-    "🔇 Volume muted"
+  osd_show_progress "volume-osd" "$OSD_ID_VOLUME" "🔇" "Volume muted" "0"
 else
-  notify-send -u low -t 1200 --replace-id=$REPLACE_ID \
-    --hint=int:value:$vol --app-name="volume-osd" \
-    "🔊 Volume $vol%"
+  osd_show_progress "volume-osd" "$OSD_ID_VOLUME" "🔊" "Volume $vol%" "$vol"
 fi
