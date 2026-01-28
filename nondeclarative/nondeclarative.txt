@@ -1,5 +1,21 @@
-idea-ultimate + crack (декларативно ток мб конфиг)
-vmware + образ
-профили firefox
+# Non-declarative / environment-specific setup
 
-перенос папок
+zapret (DPI bypass, provider-dependent)
+
+idea-ultimate
+- installation + license / crack
+- configs are declarative
+
+vmware
+- installed declaratively
+- VM images are manual / per-use
+
+minecraft
+- installed manually
+- mods / profiles not declarative
+
+firefox
+- profiles and extensions
+
+data migration
+- user folders / archives

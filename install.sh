@@ -97,6 +97,7 @@ if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAY
         echo -e "${YELLOW}⚠️ Закешированные зеркала не работают, обновляем...${RESET}"
         update_mirrors
     fi
+    bind #dig для сетевых тестов
 else
     update_mirrors
 fi
@@ -113,6 +114,7 @@ deps=(
 	base-devel
 	i3-gaps
 	i3blocks
+	i3lock  # Screen locker for power-menu
 	alacritty
 	tmux
 	rofi
@@ -154,6 +156,7 @@ deps=(
     	pavucontrol
     	sof-firmware
 	#utils
+	cbatticon #battery status icon in system tray
 	p7zip
 	qbittorrent
 	firejail #проверка подозрительных appImage
@@ -172,6 +175,7 @@ deps=(
     	swaybg             # фон
     	xdg-desktop-portal
         xdg-desktop-portal-wlr
+        xdg-desktop-portal-gtk #это x вещь для скриншера вроде
 )
 
 # было: явный for-цикл; стало: вызов хелпера
@@ -194,6 +198,7 @@ fi
 aur_pkgs=(
     xkb-switch
     light
+    xidlehook #media-aware idle detection (prevents screen blanking during video/audio)
     catppuccin-gtk-theme-mocha
     chicago95-icon-theme
     shadowsocks-rust #sslocal для аутлайн протокола впн
@@ -261,6 +266,29 @@ echo -e "${GREEN}✅ picom config linked${RESET}"
 echo -e "${CYAN}🔧 Linking GTK 3.0 settings...${RESET}"
 mkdir -p ~/.config/gtk-3.0
 ln -sf ~/dotfiles/gtk-3.0/settings.ini ~/.config/gtk-3.0/settings.ini
+
+# 🧩 Generate Thunar bookmarks for popular directories
+echo -e "${CYAN}🔧 Generating Thunar bookmarks...${RESET}"
+# Standard XDG user directories
+BOOKMARK_DIRS=(
+    "Downloads"
+    "Documents"
+    "Pictures"
+    "Music"
+    "Videos"
+    "Desktop"
+)
+
+# Create bookmarks file with only existing directories
+> ~/.config/gtk-3.0/bookmarks  # Clear/create file
+for dir in "${BOOKMARK_DIRS[@]}"; do
+    if [ -d "$HOME/$dir" ]; then
+        echo "file://$HOME/$dir $dir" >> ~/.config/gtk-3.0/bookmarks
+        echo -e "  ${GREEN}✅ Added bookmark: $dir${RESET}"
+    else
+        echo -e "  ${YELLOW}⚠️ Skipped (not found): $dir${RESET}"
+    fi
+done
 echo -e "${GREEN}✅ GTK 3.0 settings linked${RESET}"
 
 # 🧩 Alacritty
@@ -285,6 +313,17 @@ echo -e "${GREEN}✅ i3blocks config linked${RESET}"
 echo -e "${CYAN}🔧 Linking Vim config...${RESET}"
 ln -sf ~/dotfiles/vim/.vimrc ~/.vimrc
 echo -e "${GREEN}✅ Vim config linked${RESET}"
+
+# 🧩 Git config (vim as editor)
+echo -e "${CYAN}🔧 Linking Git config...${RESET}"
+ln -sf ~/dotfiles/git/.gitconfig ~/.gitconfig
+echo -e "${GREEN}✅ Git config linked${RESET}"
+
+# 🧩 Rofi config
+echo -e "${CYAN}🔧 Linking Rofi config...${RESET}"
+mkdir -p ~/.config/rofi
+ln -sf ~/dotfiles/rofi/config.rasi ~/.config/rofi/config.rasi
+echo -e "${GREEN}✅ Rofi config linked${RESET}"
 
 # 🟣 Discord Proxy
 echo -e "${CYAN}🔧 Linking Discord Proxy...${RESET}"
@@ -365,6 +404,14 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
     fi
 done
 
+
+# ─── 🎨 Appearance policy (dark mode for browsers / portal / electron) ───
+if command -v gsettings >/dev/null && [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
+  gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+else
+  echo -e "${YELLOW}⚠️ Skipping gsettings (no DBus session)${RESET}"
+fi
+
 # ─────────────────────────────────────────────
 # 🔵 Bluetooth
 echo -e "${CYAN}🔧 Настраиваем Bluetooth...${RESET}"
@@ -389,6 +436,13 @@ echo -e "${CYAN}🔧 Linking OSD scripts...${RESET}"
 mkdir -p ~/.local/bin
 ln -sf ~/dotfiles/scripts/osd/volume.sh ~/.local/bin/volume.sh
 echo -e "${GREEN}✅ volume.sh linked${RESET}"
+
+# ⚡ Power menu (Win95 vaporwave style)
+echo -e "${CYAN}⚡ Linking power-menu...${RESET}"
+mkdir -p ~/.config/rofi
+ln -sf ~/dotfiles/rofi/power-menu.rasi ~/.config/rofi/power-menu.rasi
+ln -sf ~/dotfiles/bin/power-menu.sh ~/.local/bin/power-menu.sh
+echo -e "${GREEN}✅ power-menu linked${RESET}"
 
 # ─── 💡 Keyboard Backlight Support ──────
 echo -e "${CYAN}💡 Setting up keyboard backlight support...${RESET}"
@@ -418,8 +472,25 @@ echo -e "${GREEN}✅ RTC теперь работает в localtime${RESET}"
 
 # ────── Раскладка alt shift ──────────────────────────
 
-echo -e "${CYAN}🎹 Применяем переключение раскладки Alt+Shift...${RESET}"
-setxkbmap -layout us,ru -option grp:alt_shift_toggle
+echo -e "${CYAN}🎹 Проверяем раскладку клавиатуры...${RESET}"
+
+# Check if we're in X session
+if [ -n "$DISPLAY" ]; then
+    # Get current layout configuration
+    current_layout=$(setxkbmap -query 2>/dev/null | grep layout | awk '{print $2}')
+    current_options=$(setxkbmap -query 2>/dev/null | grep options | awk '{print $2}')
+
+    # Check if us,ru layout and alt_shift_toggle are already configured
+    if [[ "$current_layout" == "us,ru" ]] && [[ "$current_options" == *"grp:alt_shift_toggle"* ]]; then
+        echo -e "${GREEN}✅ Раскладка уже настроена (us,ru + Alt+Shift)${RESET}"
+    else
+        echo -e "${CYAN}🎹 Применяем переключение раскладки Alt+Shift...${RESET}"
+        setxkbmap -layout us,ru -option grp:alt_shift_toggle
+        echo -e "${GREEN}✅ Раскладка настроена${RESET}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  Пропускаем настройку раскладки — нет X сессии${RESET}"
+fi
 
 # ─────────────────────────────────────────────
 source ~/dotfiles/scripts/audio_setup.sh
@@ -434,6 +505,10 @@ setup_power_management
 source ~/dotfiles/scripts/hardware_config.sh
 configure_hardware
 
+# ─── Media-aware idle inhibit (prevents screen blanking during playback) ───
+source ~/dotfiles/scripts/idle_inhibit.sh
+setup_idle_inhibit
+
 # ─── 📸 Snapshot helper scripts ──────────────────────────
 echo -e "${CYAN}🔧 Linking snapshot scripts...${RESET}"
 mkdir -p ~/.local/bin
@@ -444,7 +519,7 @@ for script in snapshot-create snapshot-list snapshot-diff snapshot-delete snapsh
     fi
 done
 
-# ─── 📸 Snapshots (Btrfs + Snapper) ──────────────────────
+# ─── 📸 Snapshots (Timeshift for ext4, Snapper for Btrfs) ───
 source ~/dotfiles/scripts/snapshot_setup.sh
 setup_snapshots
 

@@ -1,6 +1,7 @@
 #!/bin/bash
-# Сравнение двух снэпшотов
+# Compare two snapshots (Snapper only, Timeshift doesn't support this)
 # Usage: snapshot-diff <snapshot1> <snapshot2>
+# Supports: Snapper (Btrfs) only
 
 GREEN="\033[0;32m"
 CYAN="\033[0;36m"
@@ -8,21 +9,46 @@ YELLOW="\033[1;33m"
 RED="\033[0;31m"
 RESET="\033[0m"
 
-# Проверяем, настроен ли Snapper
-if ! sudo snapper -c root list &>/dev/null; then
-    echo -e "${RED}❌ Snapper не настроен. Запустите snapshot_setup.sh${RESET}"
-    exit 1
-fi
+# Detect which snapshot tool is available
+detect_backend() {
+    if command -v timeshift &>/dev/null && [ -f /etc/timeshift/timeshift.json ]; then
+        echo "timeshift"
+    elif command -v snapper &>/dev/null && sudo snapper -c root list &>/dev/null 2>&1; then
+        echo "snapper"
+    else
+        echo "none"
+    fi
+}
 
-if [ -z "$1" ] || [ -z "$2" ]; then
-    echo -e "${YELLOW}Использование: snapshot-diff <номер1> <номер2>${RESET}"
-    echo -e "${CYAN}Пример: snapshot-diff 1 5${RESET}"
-    echo ""
-    echo -e "${CYAN}Доступные снэпшоты:${RESET}"
-    sudo snapper -c root list
-    exit 1
-fi
+BACKEND=$(detect_backend)
 
-echo -e "${CYAN}🔍 Сравнение снэпшотов $1 и $2:${RESET}"
-echo ""
-sudo snapper -c root status "$1".."$2"
+case "$BACKEND" in
+    timeshift)
+        echo -e "${YELLOW}⚠️ Snapshot diff is not supported by Timeshift${RESET}"
+        echo -e "${CYAN}Timeshift uses rsync mode - snapshots are stored as directories${RESET}"
+        echo -e "${CYAN}You can manually compare using:${RESET}"
+        echo -e "  ${CYAN}diff -rq /timeshift/snapshots/<name1>/localhost/... /timeshift/snapshots/<name2>/localhost/...${RESET}"
+        echo ""
+        echo -e "${CYAN}Available snapshots:${RESET}"
+        sudo timeshift --list
+        ;;
+    snapper)
+        if [ -z "$1" ] || [ -z "$2" ]; then
+            echo -e "${YELLOW}Usage: snapshot-diff <number1> <number2>${RESET}"
+            echo -e "${CYAN}Example: snapshot-diff 1 5${RESET}"
+            echo ""
+            echo -e "${CYAN}Available snapshots:${RESET}"
+            sudo snapper -c root list
+            exit 1
+        fi
+
+        echo -e "${CYAN}🔍 Comparing snapshots $1 and $2:${RESET}"
+        echo ""
+        sudo snapper -c root status "$1".."$2"
+        ;;
+    *)
+        echo -e "${RED}❌ No snapshot tool configured${RESET}"
+        echo -e "${YELLOW}Run ~/dotfiles/scripts/snapshot_setup.sh to set up snapshots${RESET}"
+        exit 1
+        ;;
+esac
