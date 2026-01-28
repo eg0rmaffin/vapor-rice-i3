@@ -22,12 +22,18 @@
     progress_bar = true
     progress_bar_height = 14
     progress_bar_frame_width = 2
-    progress_bar_min_width = 280
-    progress_bar_max_width = 280
+    progress_bar_min_width = 360
+    progress_bar_max_width = 360
+    # ─── Notification Width ─────────────────────────────────
+    # Wider notification window for better text readability
+    # (0, 400) means dynamic width from 0 to max 400px
+    width = (0, 400)
     # ─── Other Global Settings ───────────────────────────────
     icon_position = left
     origin = top-right
-    offset = (20,20)
+    # Y-offset increased to 50px to prevent overlap with i3bar at top
+    # (i3bar ~24px + outer gaps 10px = ~34px, using 50px for clear separation)
+    offset = (20, 50)
     monitor = 0
     follow = mouse
     indicate_hidden = yes
