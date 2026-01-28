@@ -1,8 +1,6 @@
 #!/bin/bash
 # bin/kbd-backlight.sh - universal keyboard backlight control for laptops
-# Declarative keyboard lighting support
-
-set -e
+# Declarative keyboard lighting support with auto-detected brightness levels
 
 # Find keyboard backlight device in /sys/class/leds
 LEDS_DIR="/sys/class/leds"
@@ -57,6 +55,57 @@ CURRENT=$(cat "$BRIGHTNESS_FILE")
 STEP=$((MAX_BRIGHTNESS / 5))
 [ "$STEP" -lt 1 ] && STEP=1
 
+# Declaratively detect available brightness levels
+# Returns array of levels: 0 (off), low, medium (if applicable), max
+get_brightness_levels() {
+    local levels=()
+
+    # Always include off (0)
+    levels+=(0)
+
+    if [ "$MAX_BRIGHTNESS" -eq 1 ]; then
+        # Binary on/off only (max=1)
+        levels+=($MAX_BRIGHTNESS)
+    elif [ "$MAX_BRIGHTNESS" -eq 2 ]; then
+        # Three levels: off, low, high
+        levels+=(1 2)
+    elif [ "$MAX_BRIGHTNESS" -le 4 ]; then
+        # Few levels: off, mid, max
+        local mid=$((MAX_BRIGHTNESS / 2))
+        [ "$mid" -lt 1 ] && mid=1
+        levels+=($mid $MAX_BRIGHTNESS)
+    else
+        # Many levels available: off, low (~33%), high (~66%), max
+        local low=$((MAX_BRIGHTNESS / 3))
+        local high=$((MAX_BRIGHTNESS * 2 / 3))
+        [ "$low" -lt 1 ] && low=1
+        [ "$high" -le "$low" ] && high=$((low + 1))
+        levels+=($low $high $MAX_BRIGHTNESS)
+    fi
+
+    echo "${levels[@]}"
+}
+
+# Find the next brightness level in the cycle
+# Cycle order: off -> low -> high -> max -> off
+get_next_level() {
+    local current=$1
+    local levels=($(get_brightness_levels))
+    local num_levels=${#levels[@]}
+
+    # Find current position in levels array (or closest lower)
+    local current_idx=0
+    for ((i=0; i<num_levels; i++)); do
+        if [ "$current" -ge "${levels[$i]}" ]; then
+            current_idx=$i
+        fi
+    done
+
+    # Move to next level (wrap around to 0)
+    local next_idx=$(( (current_idx + 1) % num_levels ))
+    echo "${levels[$next_idx]}"
+}
+
 case "$1" in
     up)
         NEW=$((CURRENT + STEP))
@@ -80,6 +129,12 @@ case "$1" in
             echo "$MAX_BRIGHTNESS" > "$BRIGHTNESS_FILE"
         fi
         ;;
+    cycle)
+        # Cycle through declaratively detected brightness levels
+        # off -> low -> high -> off (number of levels depends on hardware)
+        NEW=$(get_next_level "$CURRENT")
+        echo "$NEW" > "$BRIGHTNESS_FILE"
+        ;;
     max)
         echo "$MAX_BRIGHTNESS" > "$BRIGHTNESS_FILE"
         ;;
@@ -89,21 +144,31 @@ case "$1" in
     get)
         echo "$CURRENT"
         ;;
+    levels)
+        # Show available brightness levels (declaratively detected)
+        LEVELS=($(get_brightness_levels))
+        echo "Available brightness levels: ${LEVELS[*]}"
+        echo "Max brightness: $MAX_BRIGHTNESS"
+        ;;
     status)
         DEVICE_NAME=$(basename "$KBD_BACKLIGHT")
+        LEVELS=($(get_brightness_levels))
         echo "Device: $DEVICE_NAME"
         echo "Current: $CURRENT / $MAX_BRIGHTNESS"
+        echo "Available levels: ${LEVELS[*]}"
         ;;
     *)
-        echo "Usage: $0 {up|down|toggle|max|off|get|status}"
+        echo "Usage: $0 {cycle|up|down|toggle|max|off|get|levels|status}"
         echo ""
         echo "Commands:"
+        echo "  cycle   - Cycle through brightness levels (off -> low -> high -> off)"
         echo "  up      - Increase keyboard backlight brightness"
         echo "  down    - Decrease keyboard backlight brightness"
         echo "  toggle  - Toggle keyboard backlight on/off"
         echo "  max     - Set keyboard backlight to maximum"
         echo "  off     - Turn off keyboard backlight"
         echo "  get     - Get current brightness value"
+        echo "  levels  - Show available brightness levels (declaratively detected)"
         echo "  status  - Show device info and current state"
         exit 1
         ;;
