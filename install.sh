@@ -279,8 +279,18 @@ mkdir -p ~/.config/i3blocks
 ln -sf ~/dotfiles/i3blocks/config ~/.config/i3blocks/config
 echo -e "${GREEN}✅ i3blocks config linked${RESET}"
 
-# 🧩 Thunar custom actions (archive extract/compress)
-echo -e "${CYAN}🔧 Setting up Thunar custom actions...${RESET}"
+# 🧩 Thunar archive support cleanup and custom actions
+echo -e "${CYAN}🔧 Setting up Thunar archive support...${RESET}"
+
+# Remove thunar-archive-plugin if installed (it requires GUI archive managers like xarchiver)
+# We use custom actions with CLI tools instead for a cleaner experience
+if pacman -Q thunar-archive-plugin &>/dev/null; then
+    echo -e "${YELLOW}🗑️ Removing thunar-archive-plugin (using custom actions instead)...${RESET}"
+    sudo pacman -Rns --noconfirm thunar-archive-plugin 2>/dev/null || true
+    echo -e "${GREEN}✅ thunar-archive-plugin removed${RESET}"
+fi
+
+# Set up custom actions for archive handling using existing CLI tools (p7zip, unzip, tar)
 mkdir -p ~/.config/Thunar
 ln -sf ~/dotfiles/thunar/uca.xml ~/.config/Thunar/uca.xml
 echo -e "${GREEN}✅ Thunar custom actions linked${RESET}"
