@@ -163,6 +163,8 @@ deps=(
 	thunderbird #thunderbird (no comments)
     bind #для сетевых тестов
 	playerctl #управление медиаплеерами (MPRIS)
+    mesa-utils   # OpenGL diagnostics (glxinfo, glxgears)
+    glmark2      # GPU benchmark (visual sanity check)
 	# ─── Wayland / Sway minimal ───
     	sway
         swaylock
