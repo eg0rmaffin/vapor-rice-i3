@@ -2,11 +2,57 @@
 # scripts/steam_setup.sh
 # Declarative Steam setup with hardware-aware GPU launcher generation
 # Follows existing project patterns: explicit launchers, no magic, no auto-switching
+#
+# Convergent behavior:
+# - Creates missing launchers when required
+# - Removes obsolete/invalid launchers if present
+# - Leaves correctly configured launchers untouched
+# - Never touches system launcher /usr/share/applications/steam.desktop
 
 GREEN="\033[0;32m"
 YELLOW="\033[1;33m"
 CYAN="\033[0;36m"
 RESET="\033[0m"
+
+# ──── Convergent Symlink Helper ────
+# Creates symlink only if it doesn't exist or points to wrong target
+# Returns: 0 if created/updated, 1 if already correct
+ensure_symlink() {
+    local target="$1"
+    local link="$2"
+    local description="$3"
+
+    if [ -L "$link" ]; then
+        local current_target
+        current_target=$(readlink -f "$link")
+        local expected_target
+        expected_target=$(readlink -f "$target")
+
+        if [ "$current_target" = "$expected_target" ]; then
+            echo -e "${GREEN}  ✓ $description (unchanged)${RESET}"
+            return 1
+        fi
+    fi
+
+    ln -sf "$target" "$link"
+    echo -e "${GREEN}  + $description (linked)${RESET}"
+    return 0
+}
+
+# ──── Convergent Removal Helper ────
+# Removes file only if it exists
+# Returns: 0 if removed, 1 if already absent
+ensure_removed() {
+    local file="$1"
+    local description="$2"
+
+    if [ -e "$file" ] || [ -L "$file" ]; then
+        rm -f "$file"
+        echo -e "${YELLOW}  - $description (removed)${RESET}"
+        return 0
+    fi
+    return 1
+}
 
 # ──── GPU Detection (read-only) ────
 detect_nvidia_gpu() {
@@ -55,58 +101,69 @@ detect_amd_igpu() {
     return 1
 }
 
-# ──── Launcher Creation ────
-create_steam_launchers() {
-    echo -e "${CYAN}🎮 Creating Steam launchers...${RESET}"
+# ──── Launcher Management (Convergent) ────
+# Manages Steam launchers in ~/.local/share/applications/
+# Never touches system launcher /usr/share/applications/steam.desktop
+manage_steam_launchers() {
+    echo -e "${CYAN}🎮 Managing Steam launchers (convergent)...${RESET}"
 
     local launchers_dir="$HOME/.local/share/applications"
     local bin_dir="$HOME/.local/bin"
     mkdir -p "$launchers_dir" "$bin_dir"
 
     local dotfiles_dir="${DOTFILES_DIR:-$HOME/dotfiles}"
+    local changes_made=0
 
-    # Always create default Steam launcher (uses system default GPU - usually iGPU)
+    # Always ensure default Steam launcher (uses system default GPU - usually iGPU)
     if [ -f "$dotfiles_dir/steam/steam-default.desktop" ]; then
-        ln -sf "$dotfiles_dir/steam/steam-default.desktop" "$launchers_dir/steam-default.desktop"
-        echo -e "${GREEN}  Steam (Default GPU) launcher linked${RESET}"
+        ensure_symlink "$dotfiles_dir/steam/steam-default.desktop" \
+                       "$launchers_dir/steam-default.desktop" \
+                       "Steam (Default GPU) launcher" && ((changes_made++))
     fi
 
     # NVIDIA launcher - only if NVIDIA hardware is present
     if detect_nvidia_gpu; then
         if [ -f "$dotfiles_dir/steam/steam-nvidia.sh" ]; then
-            ln -sf "$dotfiles_dir/steam/steam-nvidia.sh" "$bin_dir/steam-nvidia"
-            echo -e "${GREEN}  steam-nvidia script linked${RESET}"
+            ensure_symlink "$dotfiles_dir/steam/steam-nvidia.sh" \
+                           "$bin_dir/steam-nvidia" \
+                           "steam-nvidia script" && ((changes_made++))
         fi
         if [ -f "$dotfiles_dir/steam/steam-nvidia.desktop" ]; then
-            ln -sf "$dotfiles_dir/steam/steam-nvidia.desktop" "$launchers_dir/steam-nvidia.desktop"
-            echo -e "${GREEN}  Steam (NVIDIA) launcher linked${RESET}"
+            ensure_symlink "$dotfiles_dir/steam/steam-nvidia.desktop" \
+                           "$launchers_dir/steam-nvidia.desktop" \
+                           "Steam (NVIDIA) launcher" && ((changes_made++))
         fi
     else
-        # Remove NVIDIA launcher if hardware not present
-        rm -f "$bin_dir/steam-nvidia" 2>/dev/null
-        rm -f "$launchers_dir/steam-nvidia.desktop" 2>/dev/null
-        echo -e "${YELLOW}  NVIDIA GPU not detected - skipping NVIDIA launcher${RESET}"
+        # Remove NVIDIA launcher if hardware not present (convergent removal)
+        ensure_removed "$bin_dir/steam-nvidia" "steam-nvidia script" && ((changes_made++))
+        ensure_removed "$launchers_dir/steam-nvidia.desktop" "Steam (NVIDIA) launcher" && ((changes_made++))
     fi
 
     # AMD dGPU launcher - only if discrete AMD hardware is present
     if detect_amd_dgpu; then
         if [ -f "$dotfiles_dir/steam/steam-amd-dgpu.sh" ]; then
-            ln -sf "$dotfiles_dir/steam/steam-amd-dgpu.sh" "$bin_dir/steam-amd-dgpu"
-            echo -e "${GREEN}  steam-amd-dgpu script linked${RESET}"
+            ensure_symlink "$dotfiles_dir/steam/steam-amd-dgpu.sh" \
+                           "$bin_dir/steam-amd-dgpu" \
+                           "steam-amd-dgpu script" && ((changes_made++))
         fi
         if [ -f "$dotfiles_dir/steam/steam-amd-dgpu.desktop" ]; then
-            ln -sf "$dotfiles_dir/steam/steam-amd-dgpu.desktop" "$launchers_dir/steam-amd-dgpu.desktop"
-            echo -e "${GREEN}  Steam (AMD dGPU) launcher linked${RESET}"
+            ensure_symlink "$dotfiles_dir/steam/steam-amd-dgpu.desktop" \
+                           "$launchers_dir/steam-amd-dgpu.desktop" \
+                           "Steam (AMD dGPU) launcher" && ((changes_made++))
         fi
     else
-        # Remove AMD dGPU launcher if hardware not present
-        rm -f "$bin_dir/steam-amd-dgpu" 2>/dev/null
-        rm -f "$launchers_dir/steam-amd-dgpu.desktop" 2>/dev/null
-        echo -e "${YELLOW}  AMD discrete GPU not detected - skipping AMD dGPU launcher${RESET}"
+        # Remove AMD dGPU launcher if hardware not present (convergent removal)
+        ensure_removed "$bin_dir/steam-amd-dgpu" "steam-amd-dgpu script" && ((changes_made++))
+        ensure_removed "$launchers_dir/steam-amd-dgpu.desktop" "Steam (AMD dGPU) launcher" && ((changes_made++))
     fi
 
-    # Update desktop database
-    update-desktop-database "$launchers_dir" 2>/dev/null || true
+    # Update desktop database only if changes were made
+    if [ "$changes_made" -gt 0 ]; then
+        update-desktop-database "$launchers_dir" 2>/dev/null || true
+        echo -e "${CYAN}  Desktop database updated${RESET}"
+    fi
+
+    return $changes_made
 }
 
 # ──── Main Setup Function ────
@@ -138,10 +195,17 @@ setup_steam() {
 
     echo ""
 
-    # Create hardware-aware launchers
-    create_steam_launchers
+    # Manage hardware-aware launchers (convergent)
+    manage_steam_launchers
+    local changes=$?
 
-    echo -e "${GREEN}Steam setup complete!${RESET}"
+    echo ""
+    if [ "$changes" -eq 0 ]; then
+        echo -e "${GREEN}Steam setup: already converged (no changes needed)${RESET}"
+    else
+        echo -e "${GREEN}Steam setup: converged ($changes changes made)${RESET}"
+    fi
+
     echo -e "${CYAN}Available launchers in Rofi/application menu:${RESET}"
     echo -e "  - Steam (default system GPU)"
 
@@ -154,9 +218,89 @@ setup_steam() {
     fi
 }
 
+# ──── Self-Test Mode ────
+# Run with --test to verify convergent helper functions
+run_self_test() {
+    echo -e "${CYAN}Testing convergent helper functions...${RESET}"
+    echo ""
+
+    local test_dir
+    test_dir=$(mktemp -d)
+    trap "rm -rf $test_dir" RETURN
+
+    local passed=0
+    local failed=0
+
+    # Create test target
+    mkdir -p "$test_dir/dotfiles"
+    echo "test content" > "$test_dir/dotfiles/test.desktop"
+
+    # Test 1: Create new symlink
+    echo "Test 1: ensure_symlink creates new link"
+    ensure_symlink "$test_dir/dotfiles/test.desktop" "$test_dir/link.desktop" "test link" > /dev/null
+    if [ $? -eq 0 ] && [ -L "$test_dir/link.desktop" ]; then
+        echo -e "  ${GREEN}PASS${RESET}"
+        ((passed++))
+    else
+        echo -e "  ${YELLOW}FAIL${RESET}"
+        ((failed++))
+    fi
+
+    # Test 2: Existing correct symlink unchanged
+    echo "Test 2: ensure_symlink leaves correct link unchanged"
+    ensure_symlink "$test_dir/dotfiles/test.desktop" "$test_dir/link.desktop" "test link" > /dev/null
+    if [ $? -eq 1 ]; then
+        echo -e "  ${GREEN}PASS${RESET}"
+        ((passed++))
+    else
+        echo -e "  ${YELLOW}FAIL${RESET}"
+        ((failed++))
+    fi
+
+    # Test 3: ensure_removed on non-existent file
+    echo "Test 3: ensure_removed on non-existent file"
+    ensure_removed "$test_dir/nonexistent.desktop" "nonexistent" > /dev/null
+    if [ $? -eq 1 ]; then
+        echo -e "  ${GREEN}PASS${RESET}"
+        ((passed++))
+    else
+        echo -e "  ${YELLOW}FAIL${RESET}"
+        ((failed++))
+    fi
+
+    # Test 4: ensure_removed on existing file
+    echo "Test 4: ensure_removed removes existing file"
+    touch "$test_dir/to_remove.desktop"
+    ensure_removed "$test_dir/to_remove.desktop" "file" > /dev/null
+    if [ $? -eq 0 ] && [ ! -e "$test_dir/to_remove.desktop" ]; then
+        echo -e "  ${GREEN}PASS${RESET}"
+        ((passed++))
+    else
+        echo -e "  ${YELLOW}FAIL${RESET}"
+        ((failed++))
+    fi
+
+    echo ""
+    echo -e "Results: ${GREEN}$passed passed${RESET}, ${YELLOW}$failed failed${RESET}"
+
+    if [ $failed -eq 0 ]; then
+        echo -e "${GREEN}All tests passed!${RESET}"
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Allow sourcing or direct execution
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    setup_steam
+    case "${1:-}" in
+        --test)
+            run_self_test
+            ;;
+        *)
+            setup_steam
+            ;;
+    esac
 fi
 
 export -f setup_steam
