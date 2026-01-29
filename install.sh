@@ -481,10 +481,9 @@ else
     echo -e "${GREEN}✅ Keyboard backlight udev rule already exists${RESET}"
 fi
 
-# ─── 🕰️ Настройка локального времени RTC ──────
-echo -e "${CYAN}🕰️ Настраиваем RTC в режиме localtime...${RESET}"
-sudo timedatectl set-local-rtc 1 --adjust-system-clock
-echo -e "${GREEN}✅ RTC теперь работает в localtime${RESET}"
+# ─── 🕰️ RTC policy (localtime mode for dual-boot with Windows) ──────
+source ~/dotfiles/scripts/rtc_policy.sh
+setup_rtc_policy
 
 # ────── Раскладка alt shift ──────────────────────────
 
