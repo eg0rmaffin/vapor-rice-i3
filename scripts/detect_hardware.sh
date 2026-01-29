@@ -53,10 +53,38 @@ install_gpu_drivers() {
         done
     fi
 
-    # NVIDIA GPU – отключаем установку, выводим предупреждение
+    # NVIDIA GPU – offload-only model: install base drivers, no activation
     if lspci | grep -i 'vga\|3d\|display' | grep -i 'nvidia' &>/dev/null; then
-        echo -e "${YELLOW}⚠️ Обнаружена NVIDIA GPU. Драйверы для NVIDIA НЕ устанавливаются декларативно.${RESET}"
-        echo -e "${YELLOW}Пожалуйста, настройте драйверы NVIDIA вручную или используйте официальный установщик.${RESET}"
+        # Check if this is a hybrid setup
+        local intel_igpu=$(lspci | grep -i 'vga\|3d\|display' | grep -i 'intel')
+        local amd_igpu=$(lspci | grep -i 'vga\|3d\|display' | grep -i 'amd\|ati\|radeon')
+
+        if [[ -n "$intel_igpu" || -n "$amd_igpu" ]]; then
+            echo -e "${CYAN}┌────────────────────────────────────────────────────┐${RESET}"
+            echo -e "${CYAN}│              🎮 NVIDIA detected (hybrid GPU)        │${RESET}"
+            echo -e "${CYAN}├────────────────────────────────────────────────────┤${RESET}"
+            echo -e "${CYAN}│  Default GPU: integrated (iGPU)                    │${RESET}"
+            echo -e "${CYAN}│  NVIDIA: available for offload only                │${RESET}"
+            echo -e "${CYAN}│  Mode: per-process offload (not primary)           │${RESET}"
+            echo -e "${CYAN}└────────────────────────────────────────────────────┘${RESET}"
+        else
+            echo -e "${CYAN}🔍 NVIDIA GPU detected (discrete only)${RESET}"
+        fi
+
+        # Install base NVIDIA packages for offload capability (no Xorg configs, no activation)
+        echo -e "${CYAN}📦 Installing NVIDIA base packages (offload-only, no activation)...${RESET}"
+        local nvidia_pkgs=(nvidia-dkms nvidia-utils libglvnd)
+        for pkg in "${nvidia_pkgs[@]}"; do
+            if ! check_package "$pkg"; then
+                install_package "$pkg"
+            else
+                echo -e "${GREEN}✅ $pkg already installed${RESET}"
+            fi
+        done
+
+        echo -e "${GREEN}✅ NVIDIA packages installed (offload-ready)${RESET}"
+        echo -e "${YELLOW}ℹ️  To use NVIDIA for a specific application:${RESET}"
+        echo -e "${YELLOW}   __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia <command>${RESET}"
     fi
 
     # AMD GPU
