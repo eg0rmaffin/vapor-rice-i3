@@ -97,7 +97,7 @@ if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAY
         echo -e "${YELLOW}⚠️ Закешированные зеркала не работают, обновляем...${RESET}"
         update_mirrors
     fi
-    bind #dig для сетевых тестов
+    # Note: bind (DNS utils package) is installed via deps array
 else
     update_mirrors
 fi

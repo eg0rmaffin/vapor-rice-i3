@@ -121,25 +121,27 @@ manage_steam_launchers() {
 
     # Remove obsolete steam-default.desktop if present (convergent cleanup)
     # The system /usr/share/applications/steam.desktop is the baseline "Steam" entry
+    # Note: Using || true to prevent ((changes_made++)) from exiting under set -e
+    # when incrementing from 0 (arithmetic returns false for 0)
     ensure_removed "$launchers_dir/steam-default.desktop" \
-                   "obsolete Steam (Default) launcher (system Steam is baseline)" && ((changes_made++))
+                   "obsolete Steam (Default) launcher (system Steam is baseline)" && ((changes_made++)) || true
 
     # NVIDIA launcher - only if NVIDIA hardware is present
     if detect_nvidia_gpu; then
         if [ -f "$dotfiles_dir/steam/steam-nvidia.sh" ]; then
             ensure_symlink "$dotfiles_dir/steam/steam-nvidia.sh" \
                            "$bin_dir/steam-nvidia" \
-                           "steam-nvidia script" && ((changes_made++))
+                           "steam-nvidia script" && ((changes_made++)) || true
         fi
         if [ -f "$dotfiles_dir/steam/steam-nvidia.desktop" ]; then
             ensure_symlink "$dotfiles_dir/steam/steam-nvidia.desktop" \
                            "$launchers_dir/steam-nvidia.desktop" \
-                           "Steam (NVIDIA) launcher" && ((changes_made++))
+                           "Steam (NVIDIA) launcher" && ((changes_made++)) || true
         fi
     else
         # Remove NVIDIA launcher if hardware not present (convergent removal)
-        ensure_removed "$bin_dir/steam-nvidia" "steam-nvidia script" && ((changes_made++))
-        ensure_removed "$launchers_dir/steam-nvidia.desktop" "Steam (NVIDIA) launcher" && ((changes_made++))
+        ensure_removed "$bin_dir/steam-nvidia" "steam-nvidia script" && ((changes_made++)) || true
+        ensure_removed "$launchers_dir/steam-nvidia.desktop" "Steam (NVIDIA) launcher" && ((changes_made++)) || true
     fi
 
     # AMD dGPU launcher - only if discrete AMD hardware is present
@@ -147,17 +149,17 @@ manage_steam_launchers() {
         if [ -f "$dotfiles_dir/steam/steam-amd-dgpu.sh" ]; then
             ensure_symlink "$dotfiles_dir/steam/steam-amd-dgpu.sh" \
                            "$bin_dir/steam-amd-dgpu" \
-                           "steam-amd-dgpu script" && ((changes_made++))
+                           "steam-amd-dgpu script" && ((changes_made++)) || true
         fi
         if [ -f "$dotfiles_dir/steam/steam-amd-dgpu.desktop" ]; then
             ensure_symlink "$dotfiles_dir/steam/steam-amd-dgpu.desktop" \
                            "$launchers_dir/steam-amd-dgpu.desktop" \
-                           "Steam (AMD dGPU) launcher" && ((changes_made++))
+                           "Steam (AMD dGPU) launcher" && ((changes_made++)) || true
         fi
     else
         # Remove AMD dGPU launcher if hardware not present (convergent removal)
-        ensure_removed "$bin_dir/steam-amd-dgpu" "steam-amd-dgpu script" && ((changes_made++))
-        ensure_removed "$launchers_dir/steam-amd-dgpu.desktop" "Steam (AMD dGPU) launcher" && ((changes_made++))
+        ensure_removed "$bin_dir/steam-amd-dgpu" "steam-amd-dgpu script" && ((changes_made++)) || true
+        ensure_removed "$launchers_dir/steam-amd-dgpu.desktop" "Steam (AMD dGPU) launcher" && ((changes_made++)) || true
     fi
 
     # Update desktop database only if changes were made
@@ -166,7 +168,10 @@ manage_steam_launchers() {
         echo -e "${CYAN}  Desktop database updated${RESET}"
     fi
 
-    return $changes_made
+    # Export change count via global variable (convergent changes are not errors)
+    # Always return 0 to avoid interrupting install.sh under set -e
+    STEAM_LAUNCHER_CHANGES=$changes_made
+    return 0
 }
 
 # ──── Main Setup Function ────
@@ -199,8 +204,11 @@ setup_steam() {
     echo ""
 
     # Manage hardware-aware launchers (convergent)
+    # Note: manage_steam_launchers always returns 0 to avoid interrupting install.sh
+    # under set -e; the change count is passed via STEAM_LAUNCHER_CHANGES
+    STEAM_LAUNCHER_CHANGES=0
     manage_steam_launchers
-    local changes=$?
+    local changes=$STEAM_LAUNCHER_CHANGES
 
     echo ""
     if [ "$changes" -eq 0 ]; then
