@@ -165,6 +165,13 @@ deps=(
 	playerctl #управление медиаплеерами (MPRIS)
     mesa-utils   # OpenGL diagnostics (glxinfo, glxgears)
     glmark2      # GPU benchmark (visual sanity check)
+	# ─── Steam & Vulkan stack ───
+	steam                 # Steam client (runtime managed by Steam itself)
+	vulkan-icd-loader     # Vulkan loader (required for Vulkan games)
+	vulkan-tools          # vulkaninfo and other diagnostics
+	lib32-vulkan-icd-loader # 32-bit Vulkan loader (required for Proton)
+	lib32-mesa            # 32-bit Mesa (required for Steam/Proton on Intel/AMD)
+	lib32-libglvnd        # 32-bit GL vendor dispatch (multi-GPU support)
 	# ─── Wayland / Sway minimal ───
     	sway
         swaylock
@@ -521,6 +528,10 @@ setup_power_management
 
 source ~/dotfiles/scripts/hardware_config.sh
 configure_hardware
+
+# ─── 🎮 Steam & GPU launcher setup ───
+source ~/dotfiles/scripts/steam_setup.sh
+setup_steam
 
 # ─── Media-aware idle inhibit (prevents screen blanking during playback) ───
 source ~/dotfiles/scripts/idle_inhibit.sh
