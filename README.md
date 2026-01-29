@@ -52,3 +52,42 @@ __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia glxgears
 
 This design prioritizes **safety and portability** over automatic NVIDIA activation.
 
+## Steam & Gaming
+
+Steam is installed declaratively with a complete Vulkan stack for gaming:
+
+### What's Installed
+
+| Package | Purpose |
+|---------|---------|
+| `steam` | Steam client (Proton/runtime managed by Steam) |
+| `vulkan-icd-loader` | Vulkan loader for native Vulkan games |
+| `vulkan-tools` | Diagnostics (`vulkaninfo`) |
+| `lib32-*` | 32-bit libraries required by Proton |
+
+### GPU-Aware Launchers
+
+The installer creates hardware-aware Steam launchers following the project's explicit policy pattern:
+
+| Launcher | GPU | When Created |
+|----------|-----|--------------|
+| **Steam** | Default (iGPU) | Always |
+| **Steam (NVIDIA)** | NVIDIA offload | Only if NVIDIA GPU detected |
+| **Steam (AMD dGPU)** | AMD discrete | Only if discrete AMD GPU detected |
+
+Launchers appear in Rofi and application menus. GPU selection is always explicit - no auto-switching.
+
+### Per-Game GPU Selection
+
+For games that need specific GPU settings, Steam provides per-game launch options.
+
+NVIDIA offload:
+```
+__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia %command%
+```
+
+AMD discrete GPU:
+```
+DRI_PRIME=1 %command%
+```
+
