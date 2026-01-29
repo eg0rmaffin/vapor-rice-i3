@@ -104,6 +104,11 @@ detect_amd_igpu() {
 # ──── Launcher Management (Convergent) ────
 # Manages Steam launchers in ~/.local/share/applications/
 # Never touches system launcher /usr/share/applications/steam.desktop
+#
+# Policy: The system-provided /usr/share/applications/steam.desktop is the
+# single baseline "Steam" entry. Dotfiles only manage explicit GPU-policy
+# launchers with clear suffixes like (NVIDIA) or (AMD dGPU).
+# This avoids duplicate "Steam" entries in application menus.
 manage_steam_launchers() {
     echo -e "${CYAN}🎮 Managing Steam launchers (convergent)...${RESET}"
 
@@ -114,12 +119,10 @@ manage_steam_launchers() {
     local dotfiles_dir="${DOTFILES_DIR:-$HOME/dotfiles}"
     local changes_made=0
 
-    # Always ensure default Steam launcher (uses system default GPU - usually iGPU)
-    if [ -f "$dotfiles_dir/steam/steam-default.desktop" ]; then
-        ensure_symlink "$dotfiles_dir/steam/steam-default.desktop" \
-                       "$launchers_dir/steam-default.desktop" \
-                       "Steam (Default GPU) launcher" && ((changes_made++))
-    fi
+    # Remove obsolete steam-default.desktop if present (convergent cleanup)
+    # The system /usr/share/applications/steam.desktop is the baseline "Steam" entry
+    ensure_removed "$launchers_dir/steam-default.desktop" \
+                   "obsolete Steam (Default) launcher (system Steam is baseline)" && ((changes_made++))
 
     # NVIDIA launcher - only if NVIDIA hardware is present
     if detect_nvidia_gpu; then
@@ -207,15 +210,19 @@ setup_steam() {
     fi
 
     echo -e "${CYAN}Available launchers in Rofi/application menu:${RESET}"
-    echo -e "  - Steam (default system GPU)"
+    echo -e "  - Steam → system baseline (default GPU)"
 
     if detect_nvidia_gpu; then
-        echo -e "  - Steam (NVIDIA) - explicit NVIDIA offload"
+        echo -e "  - Steam (NVIDIA) → explicit NVIDIA offload"
     fi
 
     if detect_amd_dgpu; then
-        echo -e "  - Steam (AMD dGPU) - explicit AMD discrete GPU"
+        echo -e "  - Steam (AMD dGPU) → explicit AMD discrete GPU"
     fi
+
+    echo ""
+    echo -e "${CYAN}Note: System /usr/share/applications/steam.desktop provides the baseline${RESET}"
+    echo -e "${CYAN}      'Steam' entry. Dotfiles only manage explicit GPU-policy launchers.${RESET}"
 }
 
 # ──── Self-Test Mode ────
@@ -273,6 +280,18 @@ run_self_test() {
     touch "$test_dir/to_remove.desktop"
     ensure_removed "$test_dir/to_remove.desktop" "file" > /dev/null
     if [ $? -eq 0 ] && [ ! -e "$test_dir/to_remove.desktop" ]; then
+        echo -e "  ${GREEN}PASS${RESET}"
+        ((passed++))
+    else
+        echo -e "  ${YELLOW}FAIL${RESET}"
+        ((failed++))
+    fi
+
+    # Test 5: ensure_removed handles symlinks correctly
+    echo "Test 5: ensure_removed removes existing symlink"
+    ln -sf "$test_dir/dotfiles/test.desktop" "$test_dir/link_to_remove.desktop"
+    ensure_removed "$test_dir/link_to_remove.desktop" "symlink" > /dev/null
+    if [ $? -eq 0 ] && [ ! -L "$test_dir/link_to_remove.desktop" ]; then
         echo -e "  ${GREEN}PASS${RESET}"
         ((passed++))
     else
