@@ -50,6 +50,8 @@ Example:
 __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia glxgears
 ```
 
+![rice3](screenshots/rice3.png)
+
 This design prioritizes **safety and portability** over automatic NVIDIA activation.
 
 ## Steam & Gaming
