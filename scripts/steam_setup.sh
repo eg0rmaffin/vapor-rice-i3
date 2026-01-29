@@ -218,9 +218,89 @@ setup_steam() {
     fi
 }
 
+# ──── Self-Test Mode ────
+# Run with --test to verify convergent helper functions
+run_self_test() {
+    echo -e "${CYAN}Testing convergent helper functions...${RESET}"
+    echo ""
+
+    local test_dir
+    test_dir=$(mktemp -d)
+    trap "rm -rf $test_dir" RETURN
+
+    local passed=0
+    local failed=0
+
+    # Create test target
+    mkdir -p "$test_dir/dotfiles"
+    echo "test content" > "$test_dir/dotfiles/test.desktop"
+
+    # Test 1: Create new symlink
+    echo "Test 1: ensure_symlink creates new link"
+    ensure_symlink "$test_dir/dotfiles/test.desktop" "$test_dir/link.desktop" "test link" > /dev/null
+    if [ $? -eq 0 ] && [ -L "$test_dir/link.desktop" ]; then
+        echo -e "  ${GREEN}PASS${RESET}"
+        ((passed++))
+    else
+        echo -e "  ${YELLOW}FAIL${RESET}"
+        ((failed++))
+    fi
+
+    # Test 2: Existing correct symlink unchanged
+    echo "Test 2: ensure_symlink leaves correct link unchanged"
+    ensure_symlink "$test_dir/dotfiles/test.desktop" "$test_dir/link.desktop" "test link" > /dev/null
+    if [ $? -eq 1 ]; then
+        echo -e "  ${GREEN}PASS${RESET}"
+        ((passed++))
+    else
+        echo -e "  ${YELLOW}FAIL${RESET}"
+        ((failed++))
+    fi
+
+    # Test 3: ensure_removed on non-existent file
+    echo "Test 3: ensure_removed on non-existent file"
+    ensure_removed "$test_dir/nonexistent.desktop" "nonexistent" > /dev/null
+    if [ $? -eq 1 ]; then
+        echo -e "  ${GREEN}PASS${RESET}"
+        ((passed++))
+    else
+        echo -e "  ${YELLOW}FAIL${RESET}"
+        ((failed++))
+    fi
+
+    # Test 4: ensure_removed on existing file
+    echo "Test 4: ensure_removed removes existing file"
+    touch "$test_dir/to_remove.desktop"
+    ensure_removed "$test_dir/to_remove.desktop" "file" > /dev/null
+    if [ $? -eq 0 ] && [ ! -e "$test_dir/to_remove.desktop" ]; then
+        echo -e "  ${GREEN}PASS${RESET}"
+        ((passed++))
+    else
+        echo -e "  ${YELLOW}FAIL${RESET}"
+        ((failed++))
+    fi
+
+    echo ""
+    echo -e "Results: ${GREEN}$passed passed${RESET}, ${YELLOW}$failed failed${RESET}"
+
+    if [ $failed -eq 0 ]; then
+        echo -e "${GREEN}All tests passed!${RESET}"
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Allow sourcing or direct execution
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    setup_steam
+    case "${1:-}" in
+        --test)
+            run_self_test
+            ;;
+        *)
+            setup_steam
+            ;;
+    esac
 fi
 
 export -f setup_steam
