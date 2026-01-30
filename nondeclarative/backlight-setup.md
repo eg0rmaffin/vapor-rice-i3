@@ -12,9 +12,9 @@ The brightness control system now supports multiple backlight interfaces with au
 
 ## Quick Start
 
-1. **Test backlight detection:**
+1. **Check available backlight interfaces:**
    ```bash
-   ~/dotfiles/experiments/detect-backlight.sh
+   ls /sys/class/backlight/
    ```
 
 2. **If backlight works:**
@@ -149,9 +149,9 @@ If brightness control requires sudo, add udev rule:
 
 After configuration:
 
-1. **Run detection script:**
+1. **Check available interfaces:**
    ```bash
-   ~/dotfiles/experiments/detect-backlight.sh
+   ls /sys/class/backlight/
    ```
 
 2. **Test brightness control:**
@@ -212,7 +212,7 @@ To override, edit `~/dotfiles/bin/brightness.sh` and set `BACKLIGHT_DEVICE` manu
 ## Files Modified
 
 - `bin/brightness.sh` - Updated to support NVIDIA backlight interfaces
-- `i3/config` - Enabled brightness keybindings
+- `i3/config` - Uses include for backlight config
+- `i3/includes/backlight.conf` - Declarative backlight keybindings
 - `i3blocks/config` - Enabled brightness indicator
 - `i3blocks/brightness` - New script to display brightness percentage
-- `experiments/detect-backlight.sh` - Diagnostic tool for backlight detection
