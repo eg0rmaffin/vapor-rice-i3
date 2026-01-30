@@ -298,6 +298,27 @@ for dir in "${XDG_USER_DIRS[@]}"; do
     fi
 done
 
+# 🎨 Generate XDG user-dirs.dirs for semantic folder icons
+# This file is read by Thunar and other file managers to identify
+# which directories should display semantic icons (folder-download, folder-documents, etc.)
+# Desktop is intentionally excluded as it's not part of the i3 workflow.
+echo -e "${CYAN}🎨 Generating XDG user-dirs.dirs for semantic folder icons...${RESET}"
+mkdir -p ~/.config
+cat > ~/.config/user-dirs.dirs << 'EOF'
+# This file is written by install.sh as part of the declarative setup.
+# XDG user directories are explicitly declared here for visual semantics.
+# See also: https://wiki.archlinux.org/title/XDG_user_directories
+#
+# Desktop is intentionally excluded (not used in i3-based workflows).
+
+XDG_DOWNLOAD_DIR="$HOME/Downloads"
+XDG_DOCUMENTS_DIR="$HOME/Documents"
+XDG_PICTURES_DIR="$HOME/Pictures"
+XDG_MUSIC_DIR="$HOME/Music"
+XDG_VIDEOS_DIR="$HOME/Videos"
+EOF
+echo -e "${GREEN}✅ XDG user-dirs.dirs generated (enables semantic folder icons)${RESET}"
+
 # 🧩 Generate Thunar bookmarks for declared XDG directories
 # Bookmarks are derived only from the declared directories above.
 echo -e "${CYAN}🔧 Generating Thunar bookmarks...${RESET}"
