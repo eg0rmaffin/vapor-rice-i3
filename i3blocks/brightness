@@ -1,0 +1,49 @@
+#!/bin/bash
+# i3blocks/brightness - Display current brightness level
+
+BACKLIGHT_DIR="/sys/class/backlight"
+BACKLIGHT_DEVICE=""
+
+# Приоритет: nvidia_wmi_ec_backlight > intel_backlight > amdgpu_bl* > acpi_video*
+for pattern in "nvidia_wmi_ec_backlight" "intel_backlight" "amdgpu_bl" "acpi_video"; do
+    for device in "$BACKLIGHT_DIR"/$pattern*; do
+        if [ -d "$device" ]; then
+            BACKLIGHT_DEVICE="$(basename "$device")"
+            break 2
+        fi
+    done
+done
+
+# Если не нашли — берём любой, НО НЕ ideapad и nvidia_0
+if [ -z "$BACKLIGHT_DEVICE" ]; then
+    for device in "$BACKLIGHT_DIR"/*; do
+        if [ -d "$device" ]; then
+            name="$(basename "$device")"
+            if [ "$name" != "ideapad" ] && [ "$name" != "nvidia_0" ]; then
+                BACKLIGHT_DEVICE="$name"
+                break
+            fi
+        fi
+    done
+fi
+
+if [ -z "$BACKLIGHT_DEVICE" ]; then
+    echo "N/A"
+    exit 0
+fi
+
+BRIGHTNESS_FILE="$BACKLIGHT_DIR/$BACKLIGHT_DEVICE/brightness"
+MAX_BRIGHTNESS_FILE="$BACKLIGHT_DIR/$BACKLIGHT_DEVICE/max_brightness"
+
+if [ ! -f "$BRIGHTNESS_FILE" ] || [ ! -f "$MAX_BRIGHTNESS_FILE" ]; then
+    echo "N/A"
+    exit 0
+fi
+
+CURRENT=$(cat "$BRIGHTNESS_FILE" 2>/dev/null || echo "0")
+MAX=$(cat "$MAX_BRIGHTNESS_FILE" 2>/dev/null || echo "1")
+
+# Вычисляем процент
+PERCENT=$((CURRENT * 100 / MAX))
+
+echo "${PERCENT}%"

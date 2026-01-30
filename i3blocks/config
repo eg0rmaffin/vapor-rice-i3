@@ -14,10 +14,10 @@ command=acpi | cut -d "," -f 2-
 interval=30
 color=#f1fa8c
 
-#[brightness]
-#command=light -G | cut -d '.' -f 1 && echo "%"
-#interval=10
-#color=#50fa7b
+[brightness]
+command=~/dotfiles/i3blocks/brightness
+interval=5
+color=#50fa7b
 
 [network]
 command=nmcli -t -f active,ssid dev wifi | grep yes | cut -d ':' -f 2
