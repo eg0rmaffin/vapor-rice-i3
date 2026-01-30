@@ -276,27 +276,35 @@ echo -e "${CYAN}🔧 Linking GTK 3.0 settings...${RESET}"
 mkdir -p ~/.config/gtk-3.0
 ln -sf ~/dotfiles/gtk-3.0/settings.ini ~/.config/gtk-3.0/settings.ini
 
-# 🧩 Generate Thunar bookmarks for popular directories
-echo -e "${CYAN}🔧 Generating Thunar bookmarks...${RESET}"
-# Standard XDG user directories
-BOOKMARK_DIRS=(
+# ─────────────────────────────────────────────
+# 📁 Declarative XDG user directories
+# These directories are part of the declared filesystem contract.
+# Desktop is explicitly excluded (not used in i3-based workflows).
+echo -e "${CYAN}📁 Ensuring XDG user directories exist...${RESET}"
+XDG_USER_DIRS=(
     "Downloads"
     "Documents"
     "Pictures"
     "Music"
     "Videos"
-    "Desktop"
 )
 
-# Create bookmarks file with only existing directories
-> ~/.config/gtk-3.0/bookmarks  # Clear/create file
-for dir in "${BOOKMARK_DIRS[@]}"; do
-    if [ -d "$HOME/$dir" ]; then
-        echo "file://$HOME/$dir $dir" >> ~/.config/gtk-3.0/bookmarks
-        echo -e "  ${GREEN}✅ Added bookmark: $dir${RESET}"
+for dir in "${XDG_USER_DIRS[@]}"; do
+    if [ ! -d "$HOME/$dir" ]; then
+        mkdir -p "$HOME/$dir"
+        echo -e "  ${GREEN}✅ Created: ~/$dir${RESET}"
     else
-        echo -e "  ${YELLOW}⚠️ Skipped (not found): $dir${RESET}"
+        echo -e "  ${GREEN}✅ Already exists: ~/$dir${RESET}"
     fi
+done
+
+# 🧩 Generate Thunar bookmarks for declared XDG directories
+# Bookmarks are derived only from the declared directories above.
+echo -e "${CYAN}🔧 Generating Thunar bookmarks...${RESET}"
+> ~/.config/gtk-3.0/bookmarks  # Clear/create file
+for dir in "${XDG_USER_DIRS[@]}"; do
+    echo "file://$HOME/$dir $dir" >> ~/.config/gtk-3.0/bookmarks
+    echo -e "  ${GREEN}✅ Added bookmark: $dir${RESET}"
 done
 echo -e "${GREEN}✅ GTK 3.0 settings linked${RESET}"
 
