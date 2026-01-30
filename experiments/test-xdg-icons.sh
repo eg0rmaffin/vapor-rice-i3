@@ -81,6 +81,43 @@ test_case "File is valid shell format" "bash -n '$HOME/.config/user-dirs.dirs' 2
 test_case "Paths use \$HOME variable" "grep -q '\$HOME/' '$HOME/.config/user-dirs.dirs'"
 
 echo ""
+echo "Test: Idempotency"
+echo "--------------------------------------"
+
+# Test 10: Idempotency — running the generation logic again should not modify the file
+_xdg_dirs_expected=$(cat << 'XDGEOF'
+# This file is written by install.sh as part of the declarative setup.
+# XDG user directories are explicitly declared here for visual semantics.
+# See also: https://wiki.archlinux.org/title/XDG_user_directories
+#
+# Desktop is intentionally excluded (not used in i3-based workflows).
+
+XDG_DOWNLOAD_DIR="$HOME/Downloads"
+XDG_DOCUMENTS_DIR="$HOME/Documents"
+XDG_PICTURES_DIR="$HOME/Pictures"
+XDG_MUSIC_DIR="$HOME/Music"
+XDG_VIDEOS_DIR="$HOME/Videos"
+XDGEOF
+)
+
+# Record file modification time before re-running
+_mtime_before=$(stat -c %Y "$HOME/.config/user-dirs.dirs")
+sleep 1  # Ensure filesystem timestamp would differ if file were rewritten
+
+# Simulate the idempotent logic from install.sh
+if [ -f "$HOME/.config/user-dirs.dirs" ] && [ "$(cat "$HOME/.config/user-dirs.dirs")" = "$_xdg_dirs_expected" ]; then
+    _was_skipped=true
+else
+    echo "$_xdg_dirs_expected" > "$HOME/.config/user-dirs.dirs"
+    _was_skipped=false
+fi
+
+_mtime_after=$(stat -c %Y "$HOME/.config/user-dirs.dirs")
+
+test_case "Idempotent: skip when file already correct" "[ '$_was_skipped' = 'true' ]"
+test_case "Idempotent: file not rewritten (mtime unchanged)" "[ '$_mtime_before' = '$_mtime_after' ]"
+
+echo ""
 echo "=== Summary ==="
 echo -e "Passed: ${GREEN}$PASS${RESET}"
 echo -e "Failed: ${RED}$FAIL${RESET}"

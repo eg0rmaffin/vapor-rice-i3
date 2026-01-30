@@ -302,9 +302,10 @@ done
 # This file is read by Thunar and other file managers to identify
 # which directories should display semantic icons (folder-download, folder-documents, etc.)
 # Desktop is intentionally excluded as it's not part of the i3 workflow.
-echo -e "${CYAN}🎨 Generating XDG user-dirs.dirs for semantic folder icons...${RESET}"
+echo -e "${CYAN}🎨 Checking XDG user-dirs.dirs for semantic folder icons...${RESET}"
 mkdir -p ~/.config
-cat > ~/.config/user-dirs.dirs << 'EOF'
+
+_xdg_dirs_expected=$(cat << 'EOF'
 # This file is written by install.sh as part of the declarative setup.
 # XDG user directories are explicitly declared here for visual semantics.
 # See also: https://wiki.archlinux.org/title/XDG_user_directories
@@ -317,17 +318,32 @@ XDG_PICTURES_DIR="$HOME/Pictures"
 XDG_MUSIC_DIR="$HOME/Music"
 XDG_VIDEOS_DIR="$HOME/Videos"
 EOF
-echo -e "${GREEN}✅ XDG user-dirs.dirs generated (enables semantic folder icons)${RESET}"
+)
+
+if [ -f ~/.config/user-dirs.dirs ] && [ "$(cat ~/.config/user-dirs.dirs)" = "$_xdg_dirs_expected" ]; then
+    echo -e "${GREEN}✅ XDG user-dirs.dirs already correct${RESET}"
+else
+    echo "$_xdg_dirs_expected" > ~/.config/user-dirs.dirs
+    echo -e "${GREEN}✅ XDG user-dirs.dirs generated (enables semantic folder icons)${RESET}"
+fi
 
 # 🧩 Generate Thunar bookmarks for declared XDG directories
 # Bookmarks are derived only from the declared directories above.
-echo -e "${CYAN}🔧 Generating Thunar bookmarks...${RESET}"
-> ~/.config/gtk-3.0/bookmarks  # Clear/create file
+echo -e "${CYAN}🔧 Checking Thunar bookmarks...${RESET}"
+
+_bookmarks_expected=""
 for dir in "${XDG_USER_DIRS[@]}"; do
-    echo "file://$HOME/$dir $dir" >> ~/.config/gtk-3.0/bookmarks
-    echo -e "  ${GREEN}✅ Added bookmark: $dir${RESET}"
+    _bookmarks_expected+="file://$HOME/$dir $dir"$'\n'
 done
-echo -e "${GREEN}✅ GTK 3.0 settings linked${RESET}"
+# Remove trailing newline for comparison
+_bookmarks_expected="${_bookmarks_expected%$'\n'}"
+
+if [ -f ~/.config/gtk-3.0/bookmarks ] && [ "$(cat ~/.config/gtk-3.0/bookmarks)" = "$_bookmarks_expected" ]; then
+    echo -e "${GREEN}✅ Thunar bookmarks already correct${RESET}"
+else
+    echo "$_bookmarks_expected" > ~/.config/gtk-3.0/bookmarks
+    echo -e "${GREEN}✅ Thunar bookmarks generated${RESET}"
+fi
 
 # 🧩 Alacritty
 echo -e "${CYAN}🔧 Linking Alacritty config...${RESET}"
