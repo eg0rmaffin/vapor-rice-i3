@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+	<action>
+		<icon>package-x-generic</icon>
+		<name>Extract Here</name>
+		<unique-id>1704067200-extract-here</unique-id>
+		<command>~/.local/bin/thunar-extract-here.sh %f</command>
+		<description>Extract archive contents to current directory</description>
+		<patterns>*.zip;*.tar;*.tar.gz;*.tgz;*.tar.bz2;*.tbz2;*.tar.xz;*.txz;*.7z;*.rar</patterns>
+		<other-files/>
+		<directories/>
+	</action>
+	<action>
+		<icon>folder-new</icon>
+		<name>Extract to Folder</name>
+		<unique-id>1704067201-extract-to-folder</unique-id>
+		<command>~/.local/bin/thunar-extract-to-folder.sh %f</command>
+		<description>Extract archive to a new folder named after the archive</description>
+		<patterns>*.zip;*.tar;*.tar.gz;*.tgz;*.tar.bz2;*.tbz2;*.tar.xz;*.txz;*.7z;*.rar</patterns>
+		<other-files/>
+		<directories/>
+	</action>
+	<action>
+		<icon>package-x-generic</icon>
+		<name>Compress to ZIP</name>
+		<unique-id>1704067202-compress-zip</unique-id>
+		<command>~/.local/bin/thunar-compress-zip.sh %F</command>
+		<description>Create ZIP archive from selected files</description>
+		<patterns>*</patterns>
+		<other-files/>
+		<directories/>
+	</action>
+	<action>
+		<icon>package-x-generic</icon>
+		<name>Compress to 7z</name>
+		<unique-id>1704067203-compress-7z</unique-id>
+		<command>~/.local/bin/thunar-compress-7z.sh %F</command>
+		<description>Create 7z archive from selected files</description>
+		<patterns>*</patterns>
+		<other-files/>
+		<directories/>
+	</action>
+</actions>

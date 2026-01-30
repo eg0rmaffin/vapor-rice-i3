@@ -1,0 +1,81 @@
+SNAPSHOT GUIDE
+==============
+
+System snapshots for easy rollback. Auto-detects filesystem:
+- ext4/xfs/etc: Uses Timeshift with rsync
+- Btrfs: Uses Snapper with native snapshots
+
+REQUIREMENTS
+------------
+- Arch Linux
+- Root access (sudo)
+- For Timeshift: cronie for scheduled snapshots
+- For Snapper: Btrfs filesystem on root partition
+
+COMMANDS
+--------
+
+  snapshot-create [description]   Create a manual snapshot
+  snapshot-list                   List all snapshots
+  snapshot-delete <name/num>      Delete a snapshot
+  snapshot-rollback               Show restore instructions
+  snapshot-diff <n1> <n2>         Compare snapshots (Snapper/Btrfs only)
+
+EXAMPLES
+--------
+
+  # Create snapshot before risky changes
+  snapshot-create "before nvidia install"
+
+  # List all snapshots
+  snapshot-list
+
+  # Delete old snapshot (Timeshift uses names, Snapper uses numbers)
+  snapshot-delete 2024-01-15_10-30-00   # Timeshift
+  snapshot-delete 3                      # Snapper
+
+  # See what changed between snapshots (Snapper only)
+  snapshot-diff 1 5
+
+AUTO-SNAPSHOTS
+--------------
+
+For ext4 (Timeshift):
+  - On boot (3 kept)
+  - Daily (5 kept)
+  - Weekly (3 kept)
+  - Monthly (2 kept)
+  - Before pacman updates (if timeshift-autosnap installed)
+
+For Btrfs (Snapper):
+  - Before/after every pacman update (snap-pac)
+  - Hourly timeline snapshots
+  - Bootable from GRUB menu
+
+RESTORE / ROLLBACK
+------------------
+
+Timeshift (ext4):
+  1. Run: sudo timeshift --restore
+  2. Select snapshot and confirm
+  3. Reboot after restore
+
+  From Live USB:
+  1. Boot Arch Live USB
+  2. Install timeshift: pacman -Sy timeshift
+  3. Run: sudo timeshift --restore
+
+Snapper (Btrfs):
+  1. Reboot
+  2. In GRUB menu select "Arch Linux snapshots"
+  3. Pick the snapshot to boot into
+  4. For permanent rollback, run snapshot-rollback for instructions
+
+GUI
+---
+  Timeshift: sudo timeshift-gtk
+
+TROUBLESHOOTING
+---------------
+If commands don't work, make sure ~/.local/bin is in your PATH.
+If snapshots not configured, run: ~/dotfiles/scripts/snapshot_setup.sh

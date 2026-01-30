@@ -1,0 +1,57 @@
+#!/bin/bash
+# Create a manual system snapshot
+# Usage: snapshot-create [description]
+# Supports: Timeshift (ext4/rsync) and Snapper (Btrfs)
+
+GREEN="\033[0;32m"
+CYAN="\033[0;36m"
+YELLOW="\033[1;33m"
+RED="\033[0;31m"
+RESET="\033[0m"
+
+DESCRIPTION="${1:-Manual snapshot}"
+
+# Detect which snapshot tool is available
+detect_backend() {
+    if command -v timeshift &>/dev/null && [ -f /etc/timeshift/timeshift.json ]; then
+        echo "timeshift"
+    elif command -v snapper &>/dev/null && sudo snapper -c root list &>/dev/null 2>&1; then
+        echo "snapper"
+    else
+        echo "none"
+    fi
+}
+
+BACKEND=$(detect_backend)
+
+case "$BACKEND" in
+    timeshift)
+        echo -e "${CYAN}📸 Creating Timeshift snapshot: $DESCRIPTION${RESET}"
+        if sudo timeshift --create --comments "$DESCRIPTION" --scripted; then
+            echo -e "${GREEN}✅ Snapshot created successfully${RESET}"
+            echo ""
+            echo -e "${CYAN}Recent snapshots:${RESET}"
+            sudo timeshift --list 2>/dev/null | tail -10
+        else
+            echo -e "${RED}❌ Error creating snapshot${RESET}"
+            exit 1
+        fi
+        ;;
+    snapper)
+        echo -e "${CYAN}📸 Creating Snapper snapshot: $DESCRIPTION${RESET}"
+        if sudo snapper -c root create --description "$DESCRIPTION"; then
+            echo -e "${GREEN}✅ Snapshot created successfully${RESET}"
+            echo ""
+            echo -e "${CYAN}Recent snapshots:${RESET}"
+            sudo snapper -c root list | tail -5
+        else
+            echo -e "${RED}❌ Error creating snapshot${RESET}"
+            exit 1
+        fi
+        ;;
+    *)
+        echo -e "${RED}❌ No snapshot tool configured${RESET}"
+        echo -e "${YELLOW}Run ~/dotfiles/scripts/snapshot_setup.sh to set up snapshots${RESET}"
+        exit 1
+        ;;
+esac

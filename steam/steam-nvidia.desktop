@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Steam (NVIDIA)
+Comment=Steam with explicit NVIDIA GPU offload
+Exec=/usr/bin/env steam-nvidia %U
+Icon=steam
+Terminal=false
+Categories=Game;
+MimeType=x-scheme-handler/steam;x-scheme-handler/steamlink;

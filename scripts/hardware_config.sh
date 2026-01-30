@@ -111,10 +111,14 @@ EOF
 # Функция для настройки гибридной графики
 setup_hybrid_graphics() {
     if detect_hybrid_graphics; then
-        echo -e "${YELLOW}⚠️ Обнаружена гибридная графика. Автоматическая настройка гибридной графики отключена.${RESET}"
-        echo -e "${YELLOW}Для гибридной графики рекомендуется использовать одно из решений:${RESET}"
-        echo -e "${YELLOW}1. Использовать конфигурацию с драйвером modesetting${RESET}"
-        echo -e "${YELLOW}2. Использовать инструменты типа optimus-manager, prime или amd-switcheroo${RESET}"
+        echo -e "${CYAN}┌────────────────────────────────────────────────────┐${RESET}"
+        echo -e "${CYAN}│           ⚡ Hybrid Graphics Configuration          │${RESET}"
+        echo -e "${CYAN}├────────────────────────────────────────────────────┤${RESET}"
+        echo -e "${CYAN}│  Policy: iGPU primary, dGPU offload-only           │${RESET}"
+        echo -e "${CYAN}│  Xorg auto-config: disabled (intentional)          │${RESET}"
+        echo -e "${CYAN}│  This ensures maximum compatibility.               │${RESET}"
+        echo -e "${CYAN}└────────────────────────────────────────────────────┘${RESET}"
+        echo -e "${GREEN}✅ Hybrid graphics detected - using safe defaults${RESET}"
         
         # Проверяем существование конфигураций и предлагаем их удалить
         XORG_CONF_DIR="/etc/X11/xorg.conf.d"

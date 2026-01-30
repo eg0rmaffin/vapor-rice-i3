@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Steam (AMD dGPU)
+Comment=Steam with explicit AMD discrete GPU
+Exec=/usr/bin/env steam-amd-dgpu %U
+Icon=steam
+Terminal=false
+Categories=Game;
+MimeType=x-scheme-handler/steam;x-scheme-handler/steamlink;

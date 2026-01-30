@@ -58,6 +58,10 @@ bindsym $mod+Shift+r restart
 # Exit i3 (logs you out of your X session)
 bindsym $mod+Shift+e exit
 
+# ─── Vaporwave Power Menu (Win95 Style) ─────────────────
+# Aesthetic shutdown/reboot/suspend menu
+bindsym $mod+Shift+p exec --no-startup-id ~/dotfiles/bin/power-menu.sh
+
 # Numpad 1 — скриншот всего экрана в ~/Pictures/Screenshots
 bindsym KP_End exec --no-startup-id ~/dotfiles/bin/screenshot.sh
 
@@ -67,9 +71,8 @@ bindsym Print exec --no-startup-id ~/dotfiles/bin/screenshot.sh area
 #Wallpaper switcher
 bindsym $mod+w exec --no-startup-id ~/dotfiles/bin/wallpaper.sh
 
-# ─── Управление яркостью экрана ───
-bindsym XF86MonBrightnessUp exec --no-startup-id ~/dotfiles/bin/brightness.sh up
-bindsym XF86MonBrightnessDown exec --no-startup-id ~/dotfiles/bin/brightness.sh down
+# Screen backlight configuration (with NVIDIA hybrid support)
+include ~/dotfiles/i3/includes/backlight.conf
 
 # Status bar configuration
 bar {
@@ -126,6 +129,11 @@ exec_always --no-startup-id ~/dotfiles/bin/detect-audio-keys.sh
 
 include $HOME/.config/i3/includes/multimedia.conf
 
+# Media-aware idle inhibit (prevents screen blanking during video/audio playback)
+include ~/dotfiles/i3/includes/idle.conf
+
+# Keyboard backlight configuration for laptops
+include ~/dotfiles/i3/includes/kbd-backlight.conf
 
 #--------------------------------------
 
@@ -137,3 +145,6 @@ exec_always --no-startup-id ~/.fehbg
 
 #Блютик
 exec_always --no-startup-id blueman-applet
+
+#Батарейка
+exec_always --no-startup-id sh -lc 'pgrep -x cbatticon >/dev/null || cbatticon'

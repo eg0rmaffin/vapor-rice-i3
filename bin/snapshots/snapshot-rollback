@@ -1,0 +1,83 @@
+#!/bin/bash
+# Show system rollback instructions
+# Usage: snapshot-rollback
+# Supports: Timeshift (ext4/rsync) and Snapper (Btrfs)
+
+CYAN="\033[0;36m"
+YELLOW="\033[1;33m"
+GREEN="\033[0;32m"
+RED="\033[0;31m"
+RESET="\033[0m"
+
+# Detect which snapshot tool is available
+detect_backend() {
+    if command -v timeshift &>/dev/null && [ -f /etc/timeshift/timeshift.json ]; then
+        echo "timeshift"
+    elif command -v snapper &>/dev/null && sudo snapper -c root list &>/dev/null 2>&1; then
+        echo "snapper"
+    else
+        echo "none"
+    fi
+}
+
+BACKEND=$(detect_backend)
+
+echo -e "${CYAN}┌────────────────────────────────────────────────────────────┐${RESET}"
+echo -e "${CYAN}│              📖 System Rollback Instructions               │${RESET}"
+echo -e "${CYAN}└────────────────────────────────────────────────────────────┘${RESET}"
+echo ""
+
+case "$BACKEND" in
+    timeshift)
+        echo -e "${GREEN}Method 1: Restore from running system${RESET}"
+        echo -e "  1. Run: ${CYAN}sudo timeshift --restore${RESET}"
+        echo -e "  2. Select the snapshot to restore"
+        echo -e "  3. Confirm and wait for restore to complete"
+        echo -e "  4. Reboot when prompted"
+        echo ""
+        echo -e "${GREEN}Method 2: Restore from Live USB (if system won't boot)${RESET}"
+        echo -e "  1. Boot from Arch Linux Live USB"
+        echo -e "  2. Install timeshift: ${CYAN}pacman -Sy timeshift${RESET}"
+        echo -e "  3. Run: ${CYAN}sudo timeshift --restore${RESET}"
+        echo -e "  4. Select backup device and snapshot"
+        echo -e "  5. Reboot after restore completes"
+        echo ""
+        echo -e "${GREEN}Method 3: GUI restore${RESET}"
+        echo -e "  Run: ${CYAN}sudo timeshift-gtk${RESET}"
+        echo -e "  Select snapshot and click 'Restore'"
+        echo ""
+        echo -e "${CYAN}Current snapshots:${RESET}"
+        sudo timeshift --list 2>/dev/null || echo -e "${YELLOW}No snapshots found${RESET}"
+        ;;
+    snapper)
+        echo -e "${GREEN}Method 1: Boot into snapshot via GRUB (recommended)${RESET}"
+        echo -e "  1. Reboot your computer"
+        echo -e "  2. In GRUB menu select 'Arch Linux snapshots'"
+        echo -e "  3. Choose the snapshot to boot into"
+        echo -e "  4. System will boot in read-only mode from snapshot"
+        echo ""
+        echo -e "${GREEN}Method 2: Permanent rollback (advanced)${RESET}"
+        echo -e "  ${YELLOW}⚠️  Only do this if you understand the implications!${RESET}"
+        echo ""
+        echo -e "  1. Boot into Live USB or snapshot via GRUB"
+        echo -e "  2. Mount root Btrfs partition:"
+        echo -e "     ${CYAN}sudo mount /dev/sdXY /mnt${RESET}"
+        echo -e "  3. Rename current @ subvolume:"
+        echo -e "     ${CYAN}sudo mv /mnt/@ /mnt/@.broken${RESET}"
+        echo -e "  4. Create new @ from snapshot:"
+        echo -e "     ${CYAN}sudo btrfs subvolume snapshot /mnt/@.snapshots/X/snapshot /mnt/@${RESET}"
+        echo -e "     (where X is the snapshot number)"
+        echo -e "  5. Reboot:"
+        echo -e "     ${CYAN}sudo reboot${RESET}"
+        echo -e "  6. After successful boot, delete old subvolume:"
+        echo -e "     ${CYAN}sudo mount /dev/sdXY /mnt && sudo btrfs subvolume delete /mnt/@.broken${RESET}"
+        echo ""
+        echo -e "${CYAN}Current snapshots:${RESET}"
+        sudo snapper -c root list 2>/dev/null || echo -e "${YELLOW}Snapper not configured${RESET}"
+        ;;
+    *)
+        echo -e "${RED}❌ No snapshot tool configured${RESET}"
+        echo -e "${YELLOW}Run ~/dotfiles/scripts/snapshot_setup.sh to set up snapshots${RESET}"
+        exit 1
+        ;;
+esac
