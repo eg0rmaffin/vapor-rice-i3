@@ -277,111 +277,32 @@ mkdir -p ~/.config/gtk-3.0
 ln -sf ~/dotfiles/gtk-3.0/settings.ini ~/.config/gtk-3.0/settings.ini
 
 # ─────────────────────────────────────────────
-# 📁 Declarative XDG user directories
-# These directories are part of the declared filesystem contract.
-# Desktop is explicitly excluded (not used in i3-based workflows).
-echo -e "${CYAN}📁 Ensuring XDG user directories exist...${RESET}"
-XDG_USER_DIRS=(
-    "Downloads"
-    "Documents"
-    "Pictures"
-    "Music"
-    "Videos"
-)
-
+# 📁 XDG-папки + иконки + закладки Thunar
+echo -e "${CYAN}📁 Setting up XDG directories...${RESET}"
+XDG_USER_DIRS=("Downloads" "Documents" "Pictures" "Music" "Videos")
 for dir in "${XDG_USER_DIRS[@]}"; do
-    if [ ! -d "$HOME/$dir" ]; then
-        mkdir -p "$HOME/$dir"
-        echo -e "  ${GREEN}✅ Created: ~/$dir${RESET}"
-    else
-        echo -e "  ${GREEN}✅ Already exists: ~/$dir${RESET}"
-    fi
+    mkdir -p "$HOME/$dir"
 done
+echo -e "${GREEN}✅ XDG directories ready${RESET}"
 
-# 🎨 Generate XDG user-dirs.dirs for semantic folder icons
-# This file is read by Thunar and other file managers to identify
-# which directories should display semantic icons (folder-download, folder-documents, etc.)
-# Desktop is intentionally excluded as it's not part of the i3 workflow.
-echo -e "${CYAN}🎨 Checking XDG user-dirs.dirs for semantic folder icons...${RESET}"
+# user-dirs.dirs — Thunar uses this to show folder icons
 mkdir -p ~/.config
-
-_xdg_dirs_expected=$(cat << 'EOF'
-# This file is written by install.sh as part of the declarative setup.
-# XDG user directories are explicitly declared here for visual semantics.
-# See also: https://wiki.archlinux.org/title/XDG_user_directories
-#
-# Desktop is intentionally excluded (not used in i3-based workflows).
-
+cat > ~/.config/user-dirs.dirs << 'EOF'
 XDG_DOWNLOAD_DIR="$HOME/Downloads"
 XDG_DOCUMENTS_DIR="$HOME/Documents"
 XDG_PICTURES_DIR="$HOME/Pictures"
 XDG_MUSIC_DIR="$HOME/Music"
 XDG_VIDEOS_DIR="$HOME/Videos"
 EOF
-)
+echo -e "${GREEN}✅ XDG user-dirs.dirs written${RESET}"
 
-if [ -f ~/.config/user-dirs.dirs ] && [ "$(cat ~/.config/user-dirs.dirs)" = "$_xdg_dirs_expected" ]; then
-    echo -e "${GREEN}✅ XDG user-dirs.dirs already correct${RESET}"
-else
-    echo "$_xdg_dirs_expected" > ~/.config/user-dirs.dirs
-    echo -e "${GREEN}✅ XDG user-dirs.dirs generated (enables semantic folder icons)${RESET}"
-fi
-
-# 🧩 Generate Thunar bookmarks for declared XDG directories
-# Bookmarks are derived only from the declared directories above.
-echo -e "${CYAN}🔧 Checking Thunar bookmarks...${RESET}"
-
-_bookmarks_expected=""
+# Thunar bookmarks
+_bookmarks=""
 for dir in "${XDG_USER_DIRS[@]}"; do
-    _bookmarks_expected+="file://$HOME/$dir $dir"$'\n'
+    _bookmarks+="file://$HOME/$dir $dir"$'\n'
 done
-# Remove trailing newline for comparison
-_bookmarks_expected="${_bookmarks_expected%$'\n'}"
-
-if [ -f ~/.config/gtk-3.0/bookmarks ] && [ "$(cat ~/.config/gtk-3.0/bookmarks)" = "$_bookmarks_expected" ]; then
-    echo -e "${GREEN}✅ Thunar bookmarks already correct${RESET}"
-else
-    echo "$_bookmarks_expected" > ~/.config/gtk-3.0/bookmarks
-    echo -e "${GREEN}✅ Thunar bookmarks generated${RESET}"
-fi
-
-# 🎨 Declarative custom icon names for XDG directories (GIO metadata)
-# Forces Thunar (and other GIO-based file managers) to use semantic icon names
-# in all views — including the side panel — instead of falling back to generic
-# folder icons with emblem overlays.
-# Requires: gvfs (already in deps)
-echo -e "${CYAN}🎨 Checking custom icon metadata for XDG directories...${RESET}"
-
-declare -A XDG_DIR_ICONS=(
-    ["Downloads"]="folder-download"
-    ["Documents"]="folder-documents"
-    ["Pictures"]="folder-pictures"
-    ["Music"]="folder-music"
-    ["Videos"]="folder-videos"
-)
-
-_gio_changes=0
-for dir in "${!XDG_DIR_ICONS[@]}"; do
-    _icon="${XDG_DIR_ICONS[$dir]}"
-    _dir_path="$HOME/$dir"
-    if [ -d "$_dir_path" ]; then
-        _current_icon=$(gio info -a metadata::custom-icon-name "$_dir_path" 2>/dev/null \
-            | grep 'metadata::custom-icon-name:' | awk '{print $2}')
-        if [ "$_current_icon" = "$_icon" ]; then
-            echo -e "  ${GREEN}✅ ~/$dir icon already set ($_icon)${RESET}"
-        else
-            gio set "$_dir_path" metadata::custom-icon-name "$_icon"
-            echo -e "  ${GREEN}✅ ~/$dir icon set to $_icon${RESET}"
-            _gio_changes=$((_gio_changes + 1))
-        fi
-    fi
-done
-
-if [ $_gio_changes -eq 0 ]; then
-    echo -e "${GREEN}✅ XDG directory icons already correct${RESET}"
-else
-    echo -e "${GREEN}✅ XDG directory icons updated ($_gio_changes changes)${RESET}"
-fi
+printf '%s' "$_bookmarks" > ~/.config/gtk-3.0/bookmarks
+echo -e "${GREEN}✅ Thunar bookmarks written${RESET}"
 
 # 🧩 Alacritty
 echo -e "${CYAN}🔧 Linking Alacritty config...${RESET}"
