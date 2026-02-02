@@ -494,6 +494,77 @@ else
     echo -e "${GREEN}✅ Keyboard backlight udev rule already exists${RESET}"
 fi
 
+# ─── 💡 Declarative backlight kernel parameter (Lenovo Legion 83DH) ──────
+# Lenovo Legion Slim 5 16AHP9 (DMI product_name=83DH) with AMD iGPU + NVIDIA dGPU
+# needs acpi_backlight=nvidia_wmi_ec for the panel backlight to actually work.
+# The amdgpu_bl* interface accepts writes but does NOT change physical brightness.
+# See: https://bbs.archlinux.org/viewtopic.php?pid=2279478
+PRODUCT_NAME=$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo "unknown")
+if [ "$PRODUCT_NAME" = "83DH" ]; then
+    echo -e "${CYAN}💡 Lenovo Legion Slim 5 ($PRODUCT_NAME) detected — checking backlight kernel param...${RESET}"
+    CURRENT_CMDLINE=$(cat /proc/cmdline 2>/dev/null || echo "")
+
+    # Check if nvidia_wmi_ec is already set
+    if echo "$CURRENT_CMDLINE" | grep -q 'acpi_backlight=nvidia_wmi_ec'; then
+        echo -e "${GREEN}✅ acpi_backlight=nvidia_wmi_ec already set in kernel cmdline${RESET}"
+    else
+        # Detect bootloader and apply declaratively
+        BACKLIGHT_PARAM_APPLIED=false
+
+        # Option 1: systemd-boot
+        if [ -d "/boot/loader/entries" ]; then
+            echo -e "${CYAN}🔧 systemd-boot detected — updating boot entries...${RESET}"
+            for entry in /boot/loader/entries/*.conf; do
+                [ -f "$entry" ] || continue
+                if grep -q 'acpi_backlight=native' "$entry"; then
+                    sudo sed -i 's/acpi_backlight=native/acpi_backlight=nvidia_wmi_ec/g' "$entry"
+                    echo -e "${GREEN}✅ Replaced acpi_backlight=native → nvidia_wmi_ec in $(basename "$entry")${RESET}"
+                    BACKLIGHT_PARAM_APPLIED=true
+                elif grep -q '^options ' "$entry" && ! grep -q 'acpi_backlight=' "$entry"; then
+                    sudo sed -i '/^options / s/$/ acpi_backlight=nvidia_wmi_ec/' "$entry"
+                    echo -e "${GREEN}✅ Added acpi_backlight=nvidia_wmi_ec to $(basename "$entry")${RESET}"
+                    BACKLIGHT_PARAM_APPLIED=true
+                elif grep -q 'acpi_backlight=nvidia_wmi_ec' "$entry"; then
+                    echo -e "${GREEN}✅ $(basename "$entry") already has acpi_backlight=nvidia_wmi_ec${RESET}"
+                    BACKLIGHT_PARAM_APPLIED=true
+                fi
+            done
+        fi
+
+        # Option 2: GRUB
+        if [ -f "/etc/default/grub" ] && [ "$BACKLIGHT_PARAM_APPLIED" = false ]; then
+            echo -e "${CYAN}🔧 GRUB detected — updating backlight config...${RESET}"
+            sudo mkdir -p /etc/default/grub.d
+            GRUB_BACKLIGHT_CFG="/etc/default/grub.d/backlight.cfg"
+
+            if [ -f "$GRUB_BACKLIGHT_CFG" ] && grep -q 'acpi_backlight=nvidia_wmi_ec' "$GRUB_BACKLIGHT_CFG"; then
+                echo -e "${GREEN}✅ GRUB backlight config already correct${RESET}"
+            else
+                # Remove old config with wrong param if exists
+                sudo rm -f "$GRUB_BACKLIGHT_CFG"
+                sudo tee "$GRUB_BACKLIGHT_CFG" > /dev/null <<'GRUBEOF'
+# Lenovo Legion Slim 5 16AHP9 (83DH): backlight via NVIDIA Embedded Controller
+GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT acpi_backlight=nvidia_wmi_ec"
+GRUBEOF
+                echo -e "${GREEN}✅ Created $GRUB_BACKLIGHT_CFG${RESET}"
+                # Also fix main grub config if it has the wrong param
+                if grep -q 'acpi_backlight=native' /etc/default/grub; then
+                    sudo sed -i 's/acpi_backlight=native/acpi_backlight=nvidia_wmi_ec/g' /etc/default/grub
+                    echo -e "${GREEN}✅ Fixed acpi_backlight in /etc/default/grub${RESET}"
+                fi
+                echo -e "${YELLOW}⚠️  Run 'sudo grub-mkconfig -o /boot/grub/grub.cfg' and reboot for brightness to work${RESET}"
+            fi
+            BACKLIGHT_PARAM_APPLIED=true
+        fi
+
+        if [ "$BACKLIGHT_PARAM_APPLIED" = false ]; then
+            echo -e "${YELLOW}⚠️  Could not detect bootloader (systemd-boot or GRUB)${RESET}"
+            echo -e "${YELLOW}📝 Manually add kernel parameter: acpi_backlight=nvidia_wmi_ec${RESET}"
+            echo -e "${YELLOW}   (replace acpi_backlight=native if present)${RESET}"
+        fi
+    fi
+fi
+
 # ─── 🕰️ RTC policy (localtime mode for dual-boot with Windows) ──────
 source ~/dotfiles/scripts/rtc_policy.sh
 setup_rtc_policy

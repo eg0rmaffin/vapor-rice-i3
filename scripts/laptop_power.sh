@@ -181,12 +181,14 @@ EOF
         echo -e "${GREEN}✅ Пользователь уже в группе video${RESET}"
     fi
 
-    # Проверка на проблемные модели
+    # Проверка на Lenovo Legion Slim 5 16AHP9 (83DH) — AMD iGPU + NVIDIA dGPU
+    # Яркость управляется через NVIDIA Embedded Controller, нужен acpi_backlight=nvidia_wmi_ec
     PRODUCT=$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo "unknown")
-    if [ "$PRODUCT" = "83DH" ] && [ -d "/sys/class/backlight/ideapad" ]; then
-        echo -e "${YELLOW}⚠️  Обнаружен Lenovo IdeaPad с фейковым backlight${RESET}"
-        echo -e "${YELLOW}📝 Для работы яркости добавьте в загрузчик: acpi_backlight=native${RESET}"
-        echo -e "${YELLOW}💡 После перезагрузки яркость заработает автоматически!${RESET}"
+    if [ "$PRODUCT" = "83DH" ] && [ ! -d "/sys/class/backlight/nvidia_wmi_ec_backlight" ]; then
+        echo -e "${YELLOW}⚠️  Обнаружен Lenovo Legion Slim 5 ($PRODUCT) — яркость через NVIDIA EC${RESET}"
+        echo -e "${YELLOW}📝 Для работы яркости добавьте в загрузчик: acpi_backlight=nvidia_wmi_ec${RESET}"
+        echo -e "${YELLOW}   (удалите acpi_backlight=native если есть)${RESET}"
+        echo -e "${YELLOW}💡 После перезагрузки появится nvidia_wmi_ec_backlight и яркость заработает!${RESET}"
     fi
     
     echo -e "${GREEN}✅ Настройка энергосбережения для ноутбука завершена!${RESET}"
