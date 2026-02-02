@@ -345,6 +345,44 @@ else
     echo -e "${GREEN}✅ Thunar bookmarks generated${RESET}"
 fi
 
+# 🎨 Declarative custom icon names for XDG directories (GIO metadata)
+# Forces Thunar (and other GIO-based file managers) to use semantic icon names
+# in all views — including the side panel — instead of falling back to generic
+# folder icons with emblem overlays.
+# Requires: gvfs (already in deps)
+echo -e "${CYAN}🎨 Checking custom icon metadata for XDG directories...${RESET}"
+
+declare -A XDG_DIR_ICONS=(
+    ["Downloads"]="folder-download"
+    ["Documents"]="folder-documents"
+    ["Pictures"]="folder-pictures"
+    ["Music"]="folder-music"
+    ["Videos"]="folder-videos"
+)
+
+_gio_changes=0
+for dir in "${!XDG_DIR_ICONS[@]}"; do
+    _icon="${XDG_DIR_ICONS[$dir]}"
+    _dir_path="$HOME/$dir"
+    if [ -d "$_dir_path" ]; then
+        _current_icon=$(gio info -a metadata::custom-icon-name "$_dir_path" 2>/dev/null \
+            | grep 'metadata::custom-icon-name:' | awk '{print $2}')
+        if [ "$_current_icon" = "$_icon" ]; then
+            echo -e "  ${GREEN}✅ ~/$dir icon already set ($_icon)${RESET}"
+        else
+            gio set "$_dir_path" metadata::custom-icon-name "$_icon"
+            echo -e "  ${GREEN}✅ ~/$dir icon set to $_icon${RESET}"
+            _gio_changes=$((_gio_changes + 1))
+        fi
+    fi
+done
+
+if [ $_gio_changes -eq 0 ]; then
+    echo -e "${GREEN}✅ XDG directory icons already correct${RESET}"
+else
+    echo -e "${GREEN}✅ XDG directory icons updated ($_gio_changes changes)${RESET}"
+fi
+
 # 🧩 Alacritty
 echo -e "${CYAN}🔧 Linking Alacritty config...${RESET}"
 mkdir -p ~/.config/alacritty
