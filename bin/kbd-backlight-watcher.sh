@@ -16,6 +16,29 @@
 
 set -e
 
+# Capture D-Bus session bus address at script start for use in background subshell
+# notify-send requires DBUS_SESSION_BUS_ADDRESS to communicate with dunst
+# When running as a daemon started from i3, the environment may not persist
+# to the background subshell without explicit capture
+CAPTURED_DISPLAY="${DISPLAY:-:0}"
+
+# Try to get DBUS_SESSION_BUS_ADDRESS from environment or discover it
+if [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
+    CAPTURED_DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS"
+else
+    # Fallback: try to find D-Bus session bus address from running user processes
+    # This is needed when script is started from contexts without proper D-Bus env
+    _dbus_pid=$(pgrep -u "$USER" -x dbus-daemon 2>/dev/null | head -1)
+    if [ -n "$_dbus_pid" ]; then
+        _dbus_addr=$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/"$_dbus_pid"/environ 2>/dev/null | tr -d '\0' | cut -d= -f2-)
+        CAPTURED_DBUS_SESSION_BUS_ADDRESS="${_dbus_addr:-}"
+    fi
+    # Alternative: check XDG runtime dir for bus socket
+    if [ -z "$CAPTURED_DBUS_SESSION_BUS_ADDRESS" ] && [ -S "${XDG_RUNTIME_DIR:-/run/user/$UID}/bus" ]; then
+        CAPTURED_DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR:-/run/user/$UID}/bus"
+    fi
+fi
+
 SCRIPT_NAME="kbd-backlight-watcher"
 PIDFILE="/tmp/$SCRIPT_NAME.pid"
 
@@ -68,6 +91,10 @@ check_dependencies() {
 show_osd() {
     local osd_script="$HOME/.local/bin/kbd-backlight-osd.sh"
     if [ -x "$osd_script" ]; then
+        # Export captured environment variables for notify-send to work
+        # These are needed for D-Bus communication with dunst
+        DBUS_SESSION_BUS_ADDRESS="$CAPTURED_DBUS_SESSION_BUS_ADDRESS" \
+        DISPLAY="$CAPTURED_DISPLAY" \
         "$osd_script"
     fi
 }
@@ -95,6 +122,8 @@ start_watcher() {
 
     echo "Starting keyboard backlight watcher..."
     echo "Watching: $brightness_file"
+    echo "D-Bus: ${CAPTURED_DBUS_SESSION_BUS_ADDRESS:-not set}"
+    echo "Display: $CAPTURED_DISPLAY"
 
     # Start watcher in background
     (
@@ -168,6 +197,16 @@ status_watcher() {
 
     if ! command -v inotifywait >/dev/null 2>&1; then
         echo "Warning: inotify-tools not installed"
+    fi
+
+    # Show D-Bus environment info for debugging
+    echo ""
+    echo "D-Bus environment:"
+    echo "  DISPLAY: $CAPTURED_DISPLAY"
+    if [ -n "$CAPTURED_DBUS_SESSION_BUS_ADDRESS" ]; then
+        echo "  DBUS_SESSION_BUS_ADDRESS: $CAPTURED_DBUS_SESSION_BUS_ADDRESS"
+    else
+        echo "  DBUS_SESSION_BUS_ADDRESS: (not found - OSD notifications may not work)"
     fi
 }
 
