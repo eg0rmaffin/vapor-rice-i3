@@ -17,6 +17,11 @@ export XDG_SESSION_DESKTOP=i3
 export PATH="$HOME/.local/bin:$PATH"
 eval "$(dbus-launch --sh-syntax --exit-with-session)"
 
+# Import D-Bus and display environment into systemd user session
+# This is required for systemd user services to access the session bus
+# (e.g., kbd-backlight-watcher.service needs DBUS_SESSION_BUS_ADDRESS for dunst notifications)
+systemctl --user import-environment DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_CURRENT_DESKTOP
+
 # 🎹 Клавиатура
 setxkbmap -layout us,ru -option grp:alt_shift_toggle
 
