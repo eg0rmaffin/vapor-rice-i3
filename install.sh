@@ -163,6 +163,7 @@ deps=(
 	thunderbird #thunderbird (no comments)
     bind #для сетевых тестов
 	playerctl #управление медиаплеерами (MPRIS)
+	inotify-tools #keyboard backlight OSD watcher (inotifywait)
     mesa-utils   # OpenGL diagnostics (glxinfo, glxgears)
     glmark2      # GPU benchmark (visual sanity check)
 	# ─── Steam & Vulkan stack ───
