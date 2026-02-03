@@ -478,6 +478,7 @@ echo -e "${GREEN}✅ power-menu linked${RESET}"
 echo -e "${CYAN}💡 Setting up keyboard backlight support...${RESET}"
 mkdir -p ~/.local/bin
 ln -sf ~/dotfiles/bin/kbd-backlight.sh ~/.local/bin/kbd-backlight.sh
+ln -sf ~/dotfiles/bin/kbd-backlight-watcher.sh ~/.local/bin/kbd-backlight-watcher.sh
 echo -e "${GREEN}✅ kbd-backlight.sh linked${RESET}"
 
 # Create udev rule for keyboard backlight permissions
@@ -493,6 +494,21 @@ EOF
     echo -e "${GREEN}✅ Keyboard backlight udev rule created${RESET}"
 else
     echo -e "${GREEN}✅ Keyboard backlight udev rule already exists${RESET}"
+fi
+
+# Setup keyboard backlight watcher systemd service (for OSD notifications on Fn+Space)
+echo -e "${CYAN}🔧 Setting up keyboard backlight watcher service...${RESET}"
+mkdir -p ~/.config/systemd/user
+ln -sf ~/dotfiles/systemd/kbd-backlight-watcher.service ~/.config/systemd/user/kbd-backlight-watcher.service
+systemctl --user daemon-reload
+# Enable the service (it will start automatically with graphical session)
+systemctl --user enable kbd-backlight-watcher.service 2>/dev/null || true
+# Start now if we have a display
+if [ -n "$DISPLAY" ]; then
+    systemctl --user restart kbd-backlight-watcher.service 2>/dev/null || true
+    echo -e "${GREEN}✅ Keyboard backlight watcher service enabled and started${RESET}"
+else
+    echo -e "${GREEN}✅ Keyboard backlight watcher service enabled (will start on next login)${RESET}"
 fi
 
 # ─── 🕰️ RTC policy (localtime mode for dual-boot with Windows) ──────

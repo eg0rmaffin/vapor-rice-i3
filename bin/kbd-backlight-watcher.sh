@@ -12,32 +12,14 @@
 #
 # Dependencies: inotify-tools (inotifywait)
 #
-# Usage: kbd-backlight-watcher.sh {start|stop|status}
+# Usage:
+#   kbd-backlight-watcher.sh run     - Run in foreground (for systemd)
+#   kbd-backlight-watcher.sh start   - Start as background daemon
+#   kbd-backlight-watcher.sh stop    - Stop daemon
+#   kbd-backlight-watcher.sh status  - Show status
 
-set -e
-
-# Capture D-Bus session bus address at script start for use in background subshell
-# notify-send requires DBUS_SESSION_BUS_ADDRESS to communicate with dunst
-# When running as a daemon started from i3, the environment may not persist
-# to the background subshell without explicit capture
-CAPTURED_DISPLAY="${DISPLAY:-:0}"
-
-# Try to get DBUS_SESSION_BUS_ADDRESS from environment or discover it
-if [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
-    CAPTURED_DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS"
-else
-    # Fallback: try to find D-Bus session bus address from running user processes
-    # This is needed when script is started from contexts without proper D-Bus env
-    _dbus_pid=$(pgrep -u "$USER" -x dbus-daemon 2>/dev/null | head -1)
-    if [ -n "$_dbus_pid" ]; then
-        _dbus_addr=$(grep -z DBUS_SESSION_BUS_ADDRESS /proc/"$_dbus_pid"/environ 2>/dev/null | tr -d '\0' | cut -d= -f2-)
-        CAPTURED_DBUS_SESSION_BUS_ADDRESS="${_dbus_addr:-}"
-    fi
-    # Alternative: check XDG runtime dir for bus socket
-    if [ -z "$CAPTURED_DBUS_SESSION_BUS_ADDRESS" ] && [ -S "${XDG_RUNTIME_DIR:-/run/user/$UID}/bus" ]; then
-        CAPTURED_DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR:-/run/user/$UID}/bus"
-    fi
-fi
+# Don't exit on error - we handle errors gracefully
+set +e
 
 SCRIPT_NAME="kbd-backlight-watcher"
 PIDFILE="/tmp/$SCRIPT_NAME.pid"
@@ -75,12 +57,44 @@ if [ -z "$KBD_BACKLIGHT" ]; then
     done
 fi
 
+# Get or discover D-Bus session bus address
+# This is needed for notify-send to communicate with dunst
+get_dbus_address() {
+    # First, try environment variable
+    if [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
+        echo "$DBUS_SESSION_BUS_ADDRESS"
+        return
+    fi
+
+    # Try standard XDG runtime directory socket (systemd user session)
+    local xdg_bus="${XDG_RUNTIME_DIR:-/run/user/$UID}/bus"
+    if [ -S "$xdg_bus" ]; then
+        echo "unix:path=$xdg_bus"
+        return
+    fi
+
+    # Try to find from running dbus-daemon process
+    local dbus_pid
+    dbus_pid=$(pgrep -u "$USER" -x dbus-daemon 2>/dev/null | head -1)
+    if [ -n "$dbus_pid" ] && [ -r "/proc/$dbus_pid/environ" ]; then
+        local dbus_addr
+        dbus_addr=$(grep -z DBUS_SESSION_BUS_ADDRESS "/proc/$dbus_pid/environ" 2>/dev/null | tr -d '\0' | cut -d= -f2-)
+        if [ -n "$dbus_addr" ]; then
+            echo "$dbus_addr"
+            return
+        fi
+    fi
+
+    # No D-Bus address found
+    echo ""
+}
+
 # Check if inotifywait is available
 check_dependencies() {
     if ! command -v inotifywait >/dev/null 2>&1; then
         echo "Error: inotifywait not found. Please install inotify-tools:"
-        echo "  Ubuntu/Debian: sudo apt install inotify-tools"
         echo "  Arch Linux: sudo pacman -S inotify-tools"
+        echo "  Ubuntu/Debian: sudo apt install inotify-tools"
         echo "  Fedora: sudo dnf install inotify-tools"
         return 1
     fi
@@ -90,16 +104,74 @@ check_dependencies() {
 # OSD notification helper
 show_osd() {
     local osd_script="$HOME/.local/bin/kbd-backlight-osd.sh"
-    if [ -x "$osd_script" ]; then
-        # Export captured environment variables for notify-send to work
-        # These are needed for D-Bus communication with dunst
-        DBUS_SESSION_BUS_ADDRESS="$CAPTURED_DBUS_SESSION_BUS_ADDRESS" \
-        DISPLAY="$CAPTURED_DISPLAY" \
-        "$osd_script"
+    if [ ! -x "$osd_script" ]; then
+        return 1
     fi
+
+    # Get D-Bus address (may need to re-discover if environment changed)
+    local dbus_addr
+    dbus_addr=$(get_dbus_address)
+
+    if [ -z "$dbus_addr" ]; then
+        echo "Warning: Cannot find D-Bus session bus address" >&2
+        return 1
+    fi
+
+    # Set environment and call OSD script
+    DBUS_SESSION_BUS_ADDRESS="$dbus_addr" \
+    DISPLAY="${DISPLAY:-:0}" \
+    "$osd_script"
 }
 
-# Start the watcher daemon
+# Run watcher loop (foreground, for systemd or direct use)
+run_watcher() {
+    # Check for keyboard backlight device
+    if [ -z "$KBD_BACKLIGHT" ]; then
+        echo "No keyboard backlight device found, nothing to watch"
+        exit 0
+    fi
+
+    # Check dependencies
+    if ! check_dependencies; then
+        exit 1
+    fi
+
+    local brightness_file="$KBD_BACKLIGHT/brightness"
+
+    echo "Keyboard backlight watcher starting..."
+    echo "  Device: $(basename "$KBD_BACKLIGHT")"
+    echo "  Watching: $brightness_file"
+    echo "  D-Bus: $(get_dbus_address || echo 'not found')"
+    echo "  Display: ${DISPLAY:-:0}"
+
+    # Debounce: ignore rapid successive changes (kernel may write multiple times)
+    local last_notify=0
+    local debounce_ms=100  # Minimum 100ms between notifications
+
+    while true; do
+        # Wait for modify event on brightness file
+        # If inotifywait fails (e.g., file removed), retry after delay
+        if ! inotifywait -q -e modify "$brightness_file" >/dev/null 2>&1; then
+            echo "Warning: inotifywait failed, retrying in 5s..." >&2
+            sleep 5
+            continue
+        fi
+
+        # Debounce check using milliseconds
+        local now_ms
+        now_ms=$(($(date +%s%N 2>/dev/null || echo "0") / 1000000))
+        local diff=$((now_ms - last_notify))
+
+        if [ "$diff" -ge "$debounce_ms" ] || [ "$now_ms" -eq 0 ]; then
+            # Small delay to let kernel finish writing the value
+            sleep 0.02
+            show_osd
+            last_notify=$now_ms
+        fi
+    done
+}
+
+# Start the watcher daemon (background)
 start_watcher() {
     # Check for keyboard backlight device
     if [ -z "$KBD_BACKLIGHT" ]; then
@@ -113,63 +185,50 @@ start_watcher() {
     fi
 
     # Check if already running
-    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
         echo "Watcher already running (PID: $(cat "$PIDFILE"))"
         exit 0
     fi
 
-    local brightness_file="$KBD_BACKLIGHT/brightness"
-
     echo "Starting keyboard backlight watcher..."
-    echo "Watching: $brightness_file"
-    echo "D-Bus: ${CAPTURED_DBUS_SESSION_BUS_ADDRESS:-not set}"
-    echo "Display: $CAPTURED_DISPLAY"
+    echo "  Device: $(basename "$KBD_BACKLIGHT")"
+    echo "  Watching: $KBD_BACKLIGHT/brightness"
+    echo "  D-Bus: $(get_dbus_address || echo 'not found')"
+    echo "  Display: ${DISPLAY:-:0}"
 
-    # Start watcher in background
-    (
-        # Debounce: ignore rapid successive changes (kernel may write multiple times)
-        local last_notify=0
-        local debounce_ms=100  # Minimum 100ms between notifications
-
-        while true; do
-            # Wait for modify event on brightness file
-            inotifywait -q -e modify "$brightness_file" >/dev/null 2>&1
-
-            # Debounce check
-            local now_ms=$(($(date +%s%N) / 1000000))
-            local diff=$((now_ms - last_notify))
-
-            if [ "$diff" -ge "$debounce_ms" ]; then
-                # Small delay to let kernel finish writing the value
-                sleep 0.02
-                show_osd
-                last_notify=$now_ms
-            fi
-        done
-    ) &
-
+    # Start watcher in background using nohup for persistence
+    nohup "$0" run >/dev/null 2>&1 &
     local pid=$!
-    echo "$pid" > "$PIDFILE"
-    echo "Watcher started (PID: $pid)"
+
+    # Give it a moment to start
+    sleep 0.2
+
+    # Check if it's still running
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "$pid" > "$PIDFILE"
+        echo "Watcher started (PID: $pid)"
+    else
+        echo "Error: Watcher failed to start"
+        exit 1
+    fi
 }
 
 # Stop the watcher daemon
 stop_watcher() {
+    # Kill any running instance by name (more reliable than PID file)
+    if pkill -f "kbd-backlight-watcher.sh run" 2>/dev/null; then
+        echo "Watcher stopped"
+    fi
+
     if [ -f "$PIDFILE" ]; then
         local pid
-        pid=$(cat "$PIDFILE")
-        if kill -0 "$pid" 2>/dev/null; then
-            # Kill the main process and all its children (inotifywait)
-            pkill -P "$pid" 2>/dev/null || true
+        pid=$(cat "$PIDFILE" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
             kill "$pid" 2>/dev/null || true
-            rm -f "$PIDFILE"
-            echo "Watcher stopped (was PID: $pid)"
-        else
-            rm -f "$PIDFILE"
-            echo "Watcher was not running (stale pidfile removed)"
+            # Also kill child processes (inotifywait)
+            pkill -P "$pid" 2>/dev/null || true
         fi
-    else
-        echo "Watcher is not running"
+        rm -f "$PIDFILE"
     fi
 }
 
@@ -183,10 +242,16 @@ status_watcher() {
     echo "Device: $(basename "$KBD_BACKLIGHT")"
     echo "Brightness file: $KBD_BACKLIGHT/brightness"
 
-    if [ -f "$PIDFILE" ]; then
+    # Check if running (by process name, more reliable)
+    local running_pid
+    running_pid=$(pgrep -f "kbd-backlight-watcher.sh run" 2>/dev/null | head -1)
+
+    if [ -n "$running_pid" ]; then
+        echo "Status: Running (PID: $running_pid)"
+    elif [ -f "$PIDFILE" ]; then
         local pid
-        pid=$(cat "$PIDFILE")
-        if kill -0 "$pid" 2>/dev/null; then
+        pid=$(cat "$PIDFILE" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
             echo "Status: Running (PID: $pid)"
         else
             echo "Status: Not running (stale pidfile)"
@@ -195,22 +260,35 @@ status_watcher() {
         echo "Status: Not running"
     fi
 
+    # Check systemd service status
+    if systemctl --user is-active kbd-backlight-watcher.service >/dev/null 2>&1; then
+        echo "Systemd service: active"
+    elif systemctl --user list-unit-files kbd-backlight-watcher.service >/dev/null 2>&1; then
+        echo "Systemd service: installed but not active"
+    fi
+
     if ! command -v inotifywait >/dev/null 2>&1; then
+        echo ""
         echo "Warning: inotify-tools not installed"
     fi
 
     # Show D-Bus environment info for debugging
     echo ""
     echo "D-Bus environment:"
-    echo "  DISPLAY: $CAPTURED_DISPLAY"
-    if [ -n "$CAPTURED_DBUS_SESSION_BUS_ADDRESS" ]; then
-        echo "  DBUS_SESSION_BUS_ADDRESS: $CAPTURED_DBUS_SESSION_BUS_ADDRESS"
+    echo "  DISPLAY: ${DISPLAY:-:0}"
+    local dbus_addr
+    dbus_addr=$(get_dbus_address)
+    if [ -n "$dbus_addr" ]; then
+        echo "  DBUS_SESSION_BUS_ADDRESS: $dbus_addr"
     else
         echo "  DBUS_SESSION_BUS_ADDRESS: (not found - OSD notifications may not work)"
     fi
 }
 
 case "$1" in
+    run)
+        run_watcher
+        ;;
     start)
         start_watcher
         ;;
@@ -226,17 +304,21 @@ case "$1" in
         start_watcher
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status}"
+        echo "Usage: $0 {run|start|stop|restart|status}"
         echo ""
         echo "Monitor keyboard backlight changes and show dunst OSD notification."
         echo "This works even when Fn+Space is handled directly by firmware/kernel"
         echo "and X11 never receives the keypress."
         echo ""
         echo "Commands:"
-        echo "  start   - Start the watcher daemon"
+        echo "  run     - Run watcher in foreground (for systemd service)"
+        echo "  start   - Start the watcher as background daemon"
         echo "  stop    - Stop the watcher daemon"
         echo "  restart - Restart the watcher daemon"
         echo "  status  - Show watcher status and device info"
+        echo ""
+        echo "Recommended: Use systemd service for automatic startup:"
+        echo "  systemctl --user enable --now kbd-backlight-watcher.service"
         exit 1
         ;;
 esac
