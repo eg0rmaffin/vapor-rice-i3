@@ -164,6 +164,13 @@ case "$1" in
         echo "Available brightness levels: ${LEVELS[*]}"
         echo "Max brightness: $MAX_BRIGHTNESS"
         ;;
+    notify)
+        # Show OSD notification only (without changing brightness)
+        # Used when kernel/firmware already handled the brightness change (e.g. Fn+Space)
+        # Small delay to let kernel finish writing brightness value before reading it for OSD
+        sleep 0.05
+        show_osd
+        ;;
     status)
         DEVICE_NAME=$(basename "$KBD_BACKLIGHT")
         LEVELS=($(get_brightness_levels))
@@ -172,13 +179,14 @@ case "$1" in
         echo "Available levels: ${LEVELS[*]}"
         ;;
     *)
-        echo "Usage: $0 {cycle|up|down|toggle|max|off|get|levels|status}"
+        echo "Usage: $0 {cycle|up|down|toggle|notify|max|off|get|levels|status}"
         echo ""
         echo "Commands:"
         echo "  cycle   - Cycle through brightness levels (off -> low -> high -> off)"
         echo "  up      - Increase keyboard backlight brightness"
         echo "  down    - Decrease keyboard backlight brightness"
         echo "  toggle  - Toggle keyboard backlight on/off"
+        echo "  notify  - Show OSD notification only (for Fn-key handled by kernel)"
         echo "  max     - Set keyboard backlight to maximum"
         echo "  off     - Turn off keyboard backlight"
         echo "  get     - Get current brightness value"
