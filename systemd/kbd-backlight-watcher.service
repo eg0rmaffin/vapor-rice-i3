@@ -1,0 +1,19 @@
+[Unit]
+Description=Keyboard backlight OSD notification watcher
+Documentation=https://github.com/eg0rmaffin/vapor-rice-i3
+# Start after the graphical session is ready
+After=graphical-session.target
+# Part of the graphical session
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Run the watcher directly (not as a daemon, systemd manages the process)
+ExecStart=%h/dotfiles/bin/kbd-backlight-watcher.sh run
+# Restart on failure
+Restart=on-failure
+RestartSec=3
+# Environment is inherited from user session (includes DBUS_SESSION_BUS_ADDRESS, DISPLAY)
+
+[Install]
+WantedBy=graphical-session.target
