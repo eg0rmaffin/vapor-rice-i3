@@ -126,6 +126,8 @@ exec --no-startup-id picom --config ~/.config/picom/picom.conf
 include ~/dotfiles/i3/includes/audio.conf
 # Автоматическое определение и настройка аудио-клавиш
 exec_always --no-startup-id ~/dotfiles/bin/detect-audio-keys.sh
+# Ensure Virtual Output is always the default audio sink after login/reload
+exec_always --no-startup-id ~/dotfiles/bin/audio-ensure-default.sh
 
 include $HOME/.config/i3/includes/multimedia.conf
 

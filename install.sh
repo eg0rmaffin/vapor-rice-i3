@@ -469,7 +469,8 @@ ln -sf ~/dotfiles/scripts/osd/osd-panel.sh ~/.local/bin/osd-panel.sh
 ln -sf ~/dotfiles/scripts/osd/volume.sh ~/.local/bin/volume.sh
 ln -sf ~/dotfiles/scripts/osd/kbd-backlight.sh ~/.local/bin/kbd-backlight-osd.sh
 ln -sf ~/dotfiles/bin/audio-policy-check.sh ~/.local/bin/audio-policy-check.sh
-echo -e "${GREEN}✅ OSD scripts linked (volume, keyboard backlight, audio-policy-check)${RESET}"
+ln -sf ~/dotfiles/bin/audio-ensure-default.sh ~/.local/bin/audio-ensure-default.sh
+echo -e "${GREEN}✅ OSD scripts linked (volume, keyboard backlight, audio-policy-check, audio-ensure-default)${RESET}"
 
 # ⚡ Power menu (Win95 vaporwave style)
 echo -e "${CYAN}⚡ Linking power-menu...${RESET}"
