@@ -78,18 +78,29 @@ echo ""
 # ─── 3. Virtual Output sink ───
 echo -e "${CYAN}🔊 Virtual Output sink:${RESET}"
 if command -v wpctl &>/dev/null; then
-    # Check if virtual_output_sink exists in the graph
+    # Check if virtual_output_sink exists anywhere in the audio graph.
+    # Note: loopback nodes appear under "Filters" (not "Sinks") because
+    # PipeWire automatically sets node.link-group on loopback modules.
+    # This is expected and does not affect functionality.
     virtual_found=$(wpctl status 2>/dev/null | grep -c "virtual_output_sink" || true)
     check "Virtual Output sink exists" \
         "$([ "$virtual_found" -gt 0 ] && echo true || echo false)"
 
-    # Check if it is the default sink (marked with * in wpctl status)
+    # Check if it is the default sink (marked with * in wpctl status).
+    # The * can appear in both the Sinks and Filters sections — both are valid.
     default_virtual=$(wpctl status 2>/dev/null | grep -E '^\s*\*.*virtual_output_sink' || true)
     if [ -n "$default_virtual" ]; then
         check "Virtual Output is default sink" "true"
     else
-        check "Virtual Output is default sink" "false"
-        echo -e "  ${YELLOW}  Hint: run 'wpctl set-default <id>' where <id> is the Virtual Output node ID${RESET}"
+        # Also check via wpctl inspect: get the default sink ID and compare
+        default_id=$(wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null | grep -o 'id [0-9]*' | grep -o '[0-9]*' | head -1)
+        virtual_id=$(wpctl status 2>/dev/null | grep -i "virtual_output_sink" | grep -o '[0-9]*' | head -1)
+        if [ -n "$default_id" ] && [ -n "$virtual_id" ] && [ "$default_id" = "$virtual_id" ]; then
+            check "Virtual Output is default sink" "true"
+        else
+            check "Virtual Output is default sink" "false"
+            echo -e "  ${YELLOW}  Hint: run 'wpctl set-default <id>' where <id> is the Virtual Output node ID${RESET}"
+        fi
     fi
 else
     echo -e "  ${YELLOW}⚠️ wpctl not found${RESET}"

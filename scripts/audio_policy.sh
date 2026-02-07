@@ -18,6 +18,13 @@
 #      When BT connects:  loopback moves to BT   (apps unaffected)
 #      When BT disconnects: loopback moves back   (apps unaffected)
 #
+#    IMPORTANT: This script NEVER restarts PipeWire.
+#      Restarting PipeWire kills the PulseAudio socket, which permanently
+#      breaks audio in applications that don't implement reconnection
+#      (Minecraft/Java, Telegram Desktop, Electron apps, many games).
+#      Config files are deployed as symlinks and take effect on next
+#      session start or after a WirePlumber-only restart.
+#
 #    Dependencies: wireplumber, pipewire, pipewire-pulse
 # ─────────────────────────────────────────────
 
@@ -58,30 +65,33 @@ setup_audio_policy() {
         echo -e "  ${GREEN}✅ Stale state cleared${RESET}"
     fi
 
-    # ─── Restart PipeWire + WirePlumber to apply ───
-    if systemctl --user is-active pipewire.service &>/dev/null; then
-        echo -e "${CYAN}  🔄 Restarting PipeWire to load virtual sink...${RESET}"
-        systemctl --user restart pipewire.service 2>/dev/null || true
-        # PipeWire-Pulse and WirePlumber restart automatically (socket-activated / bound)
-        sleep 2
-        echo -e "  ${GREEN}✅ PipeWire restarted${RESET}"
-    else
-        echo -e "  ${YELLOW}⚠️ PipeWire not running, policy will apply on next start${RESET}"
+    # ─── Apply WirePlumber policy without killing PipeWire ───
+    # NEVER restart PipeWire — it destroys PulseAudio connections for
+    # running apps (Minecraft, Telegram, games lose audio permanently).
+    # Only restart WirePlumber, which re-reads its configs while PipeWire
+    # and all application connections stay intact.
+    if systemctl --user is-active wireplumber.service &>/dev/null; then
+        echo -e "${CYAN}  🔄 Restarting WirePlumber to apply policy (PipeWire untouched)...${RESET}"
+        systemctl --user restart wireplumber.service 2>/dev/null || true
+        sleep 1
+        echo -e "  ${GREEN}✅ WirePlumber restarted${RESET}"
     fi
 
-    # ─── Set Virtual Output as default sink ───
+    # ─── Check if Virtual Output sink is already available ───
+    # The virtual sink is loaded by PipeWire (not WirePlumber), so it
+    # only appears after PipeWire reads 50-virtual-sink.conf.
+    # On first install this won't exist yet — it will appear on next login.
     if command -v wpctl &>/dev/null; then
-        # Wait for WirePlumber to settle after restart
-        sleep 1
         local virtual_id
         virtual_id=$(wpctl status 2>/dev/null | grep -i "virtual_output_sink" | grep -o '[0-9]*' | head -1)
         if [ -n "$virtual_id" ]; then
             wpctl set-default "$virtual_id" 2>/dev/null || true
             echo -e "  ${GREEN}✅ Virtual Output set as default sink (id=$virtual_id)${RESET}"
         else
-            echo -e "  ${YELLOW}⚠️ Virtual Output sink not found yet (will be set on next login)${RESET}"
+            echo -e "  ${YELLOW}⚠️ Virtual Output sink not loaded yet (PipeWire configs take effect on next login)${RESET}"
         fi
     fi
 
     echo -e "${GREEN}✅ Deterministic audio policy deployed${RESET}"
+    echo -e "  ${CYAN}ℹ️  PipeWire configs (virtual sink) will take effect on next login${RESET}"
 }
