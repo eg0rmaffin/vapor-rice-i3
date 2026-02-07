@@ -22,6 +22,11 @@ eval "$(dbus-launch --sh-syntax --exit-with-session)"
 # (e.g., kbd-backlight-watcher.service needs DBUS_SESSION_BUS_ADDRESS for dunst notifications)
 systemctl --user import-environment DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_CURRENT_DESKTOP
 
+# Activate graphical-session.target for systemd user services
+# startx/.xinitrc does not activate this target automatically (unlike display managers)
+# This pulls in services like kbd-backlight-watcher.service that are WantedBy=graphical-session.target
+systemctl --user start graphical-session.target
+
 # 🎹 Клавиатура
 setxkbmap -layout us,ru -option grp:alt_shift_toggle
 
