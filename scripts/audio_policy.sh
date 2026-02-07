@@ -25,6 +25,12 @@
 #      Config files are deployed as symlinks and take effect on next
 #      session start or after a WirePlumber-only restart.
 #
+#    Volume policy:
+#      Physical (ALSA) devices always at 100% volume.
+#      Virtual sink is the single user-facing volume control.
+#      This avoids double-attenuation (virtual × physical) that makes
+#      speakers sound too quiet even at 100% virtual sink volume.
+#
 #    Dependencies: wireplumber, pipewire, pipewire-pulse
 # ─────────────────────────────────────────────
 
@@ -90,6 +96,23 @@ setup_audio_policy() {
         else
             echo -e "  ${YELLOW}⚠️ Virtual Output sink not loaded yet (PipeWire configs take effect on next login)${RESET}"
         fi
+    fi
+
+    # ─── Set physical ALSA sinks to 100% volume ───
+    # Clear any previously saved low volumes. With the virtual sink
+    # architecture, physical devices should be at max — the user controls
+    # volume through the virtual sink (one knob, Windows-like behavior).
+    if command -v pactl &>/dev/null; then
+        echo -e "${CYAN}  🔊 Setting physical ALSA sinks to 100% volume...${RESET}"
+        pactl list sinks short 2>/dev/null | while read -r _ sink_name _; do
+            case "$sink_name" in
+                alsa_output.*)
+                    pactl set-sink-volume "$sink_name" 100% 2>/dev/null || true
+                    pactl set-sink-mute "$sink_name" 0 2>/dev/null || true
+                    echo -e "  ${GREEN}✅ $sink_name → 100%${RESET}"
+                    ;;
+            esac
+        done
     fi
 
     echo -e "${GREEN}✅ Deterministic audio policy deployed${RESET}"
