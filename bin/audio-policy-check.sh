@@ -10,10 +10,9 @@
 #      2. WirePlumber config files deployed
 #      3. PipeWire + WirePlumber services running
 #      4. Virtual Output sink exists and is default
-#      5. Bluetooth profile switching disabled
-#      6. Stream routing policy correct
-#      7. ALSA suspend policy correct
-#      8. Current audio device status
+#      5. WirePlumber stream/BT policy settings
+#      6. Physical ALSA sinks at 100% volume
+#      7. Current audio device status
 #
 #    Dependencies: wireplumber, wpctl, pipewire
 # ─────────────────────────────────────────────
@@ -141,7 +140,36 @@ if command -v wpctl &>/dev/null; then
     echo ""
 fi
 
-# ─── 5. Audio device status ───
+# ─── 5. Physical sink volume ───
+echo -e "${CYAN}🔊 Physical ALSA sink volume:${RESET}"
+if command -v pactl &>/dev/null; then
+    # Read ALSA sinks into array to avoid subshell (preserves ok/fail counters)
+    alsa_sinks=()
+    while read -r _ sink_name _; do
+        case "$sink_name" in alsa_output.*) alsa_sinks+=("$sink_name") ;; esac
+    done < <(pactl list sinks short 2>/dev/null)
+
+    for sink_name in "${alsa_sinks[@]}"; do
+        vol=$(pactl get-sink-volume "$sink_name" 2>/dev/null | grep -o '[0-9]*%' | head -1)
+        mute=$(pactl get-sink-mute "$sink_name" 2>/dev/null | grep -o 'yes\|no')
+        if [ "$vol" = "100%" ] && [ "$mute" = "no" ]; then
+            check "$sink_name at $vol (mute=$mute)" "true"
+        else
+            check "$sink_name at ${vol:-?} (mute=${mute:-?}) — should be 100%" "false"
+            echo -e "  ${YELLOW}  Hint: run 'pactl set-sink-volume $sink_name 100%'${RESET}"
+        fi
+    done
+
+    if [ ${#alsa_sinks[@]} -eq 0 ]; then
+        echo -e "  ${YELLOW}⚠️ No physical ALSA sinks found${RESET}"
+    fi
+else
+    echo -e "  ${YELLOW}⚠️ pactl not found${RESET}"
+fi
+
+echo ""
+
+# ─── 6. Audio device status ───
 echo -e "${CYAN}🔊 Current audio devices:${RESET}"
 if command -v wpctl &>/dev/null; then
     wpctl status 2>/dev/null | head -40
@@ -151,7 +179,7 @@ fi
 
 echo ""
 
-# ─── 6. Architecture diagram ───
+# ─── 7. Architecture diagram ───
 echo -e "${CYAN}📐 Expected audio architecture:${RESET}"
 echo "  App streams → [Virtual Output sink] → loopback → [physical device]"
 echo "  When BT connects:  loopback moves to BT   (apps unaffected)"
