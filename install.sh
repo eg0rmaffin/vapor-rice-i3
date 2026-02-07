@@ -9,6 +9,32 @@ CYAN="\033[0;36m"
 RESET="\033[0m"
 
 # ─────────────────────────────────────────────
+# ⏱ Sync cache: skip pacman -Sy if already synced recently
+# Override: pass --force-sync or set FORCE_SYNC=1
+SYNC_COOLDOWN=3600  # seconds (1 hour)
+SYNC_STAMP="$HOME/.cache/vapor-rice/last-sync"
+
+FORCE_SYNC=0
+for arg in "$@"; do
+    [[ "$arg" == "--force-sync" ]] && FORCE_SYNC=1
+done
+
+needs_sync() {
+    [[ "$FORCE_SYNC" -eq 1 ]] && return 0
+    [[ ! -f "$SYNC_STAMP" ]] && return 0
+    local last now age
+    last=$(cat "$SYNC_STAMP" 2>/dev/null || echo 0)
+    now=$(date +%s)
+    age=$(( now - last ))
+    [[ "$age" -ge "$SYNC_COOLDOWN" ]]
+}
+
+mark_synced() {
+    mkdir -p "$(dirname "$SYNC_STAMP")"
+    date +%s > "$SYNC_STAMP"
+}
+
+# ─────────────────────────────────────────────
 # 🧩 helper: установка списков пакетов
 install_list() {
   local -a pkgs=("$@")
@@ -32,11 +58,11 @@ echo -e "${RESET}"
 
 # ─────────────────────────────────────────────
 # 🧱 Включаем multilib
+MULTILIB_CHANGED=0
 if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
     echo -e "${YELLOW}🔧 Добавляем multilib репозиторий...${RESET}"
     sudo sed -i '/#\[multilib\]/,/#Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
-    echo -e "${CYAN}🔄 Обновляем кеш pacman...${RESET}"
-    sudo pacman -Sy
+    MULTILIB_CHANGED=1
     echo -e "${GREEN}✅ multilib репозиторий активирован${RESET}"
 else
     echo -e "${GREEN}✅ multilib уже включён${RESET}"
@@ -44,67 +70,78 @@ fi
 
 # ─────────────────────────────────────────────
 # ─────────────────────────────────────────────
-# 🌐 Обновление зеркал (с кешем и фоллбеком)
-echo -e "${CYAN}🌐 Проверяем зеркала...${RESET}"
+# 🌐 Обновление зеркал и синхронизация pacman
 
-MIRROR_CACHE="$HOME/.cache/mirrorlist"
-CACHE_AGE_DAYS=7
-
-# 1️⃣ Убедимся, что reflector установлен
-if ! command -v reflector &>/dev/null; then
-    echo -e "${YELLOW}📦 Устанавливаем reflector...${RESET}"
-    sudo pacman -S --noconfirm reflector
+# Force sync when multilib was just enabled (new repos need db download)
+if [[ "$MULTILIB_CHANGED" -eq 1 ]]; then
+    FORCE_SYNC=1
 fi
 
-# 2️⃣ Бэкапим текущий список
-sudo cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
+if needs_sync; then
+    echo -e "${CYAN}🌐 Проверяем зеркала...${RESET}"
 
-# 3️⃣ Функция обновления зеркал
-update_mirrors() {
-    echo -e "${CYAN}🔄 Обновляем зеркала через reflector (~1 мин)...${RESET}"
-    
-    echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /tmp/mirrorlist.new
-    
-    if sudo reflector \
-        --country Russia,Kazakhstan,Germany,Netherlands,Sweden,Finland \
-        --protocol https \
-        --ipv4 \
-        --connection-timeout 15 \
-        --download-timeout 15 \
-        --latest 10 \
-        --sort rate \
-        --save /tmp/mirrorlist.reflector 2>/dev/null && \
-       grep -q '^Server' /tmp/mirrorlist.reflector; then
-        
-        cat /tmp/mirrorlist.reflector >> /tmp/mirrorlist.new
-        echo -e "${GREEN}✅ Добавлено $(grep -c '^Server' /tmp/mirrorlist.reflector) зеркал${RESET}"
-    else
-        echo -e "${YELLOW}⚠️ Reflector не отработал, используем только geo CDN${RESET}"
+    MIRROR_CACHE="$HOME/.cache/mirrorlist"
+    CACHE_AGE_DAYS=7
+
+    # 1️⃣ Убедимся, что reflector установлен
+    if ! command -v reflector &>/dev/null; then
+        echo -e "${YELLOW}📦 Устанавливаем reflector...${RESET}"
+        sudo pacman -S --noconfirm reflector
     fi
-    
-    mkdir -p "$(dirname "$MIRROR_CACHE")"
-    cp /tmp/mirrorlist.new "$MIRROR_CACHE"
-    sudo mv /tmp/mirrorlist.new /etc/pacman.d/mirrorlist
-}
 
-# 4️⃣ Проверяем кеш
-if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAYS 2>/dev/null)" ]; then
-    echo -e "${GREEN}✅ Используем закешированные зеркала (<$CACHE_AGE_DAYS дней)${RESET}"
-    sudo cp "$MIRROR_CACHE" /etc/pacman.d/mirrorlist
-    
-    # Проверяем, работают ли зеркала
-    if ! sudo pacman -Sy --noconfirm 2>/dev/null; then
-        echo -e "${YELLOW}⚠️ Закешированные зеркала не работают, обновляем...${RESET}"
+    # 2️⃣ Бэкапим текущий список
+    sudo cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
+
+    # 3️⃣ Функция обновления зеркал
+    update_mirrors() {
+        echo -e "${CYAN}🔄 Обновляем зеркала через reflector (~1 мин)...${RESET}"
+
+        echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /tmp/mirrorlist.new
+
+        if sudo reflector \
+            --country Russia,Kazakhstan,Germany,Netherlands,Sweden,Finland \
+            --protocol https \
+            --ipv4 \
+            --connection-timeout 15 \
+            --download-timeout 15 \
+            --latest 10 \
+            --sort rate \
+            --save /tmp/mirrorlist.reflector 2>/dev/null && \
+           grep -q '^Server' /tmp/mirrorlist.reflector; then
+
+            cat /tmp/mirrorlist.reflector >> /tmp/mirrorlist.new
+            echo -e "${GREEN}✅ Добавлено $(grep -c '^Server' /tmp/mirrorlist.reflector) зеркал${RESET}"
+        else
+            echo -e "${YELLOW}⚠️ Reflector не отработал, используем только geo CDN${RESET}"
+        fi
+
+        mkdir -p "$(dirname "$MIRROR_CACHE")"
+        cp /tmp/mirrorlist.new "$MIRROR_CACHE"
+        sudo mv /tmp/mirrorlist.new /etc/pacman.d/mirrorlist
+    }
+
+    # 4️⃣ Проверяем кеш
+    if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAYS 2>/dev/null)" ]; then
+        echo -e "${GREEN}✅ Используем закешированные зеркала (<$CACHE_AGE_DAYS дней)${RESET}"
+        sudo cp "$MIRROR_CACHE" /etc/pacman.d/mirrorlist
+
+        # Проверяем, работают ли зеркала
+        if ! sudo pacman -Sy --noconfirm 2>/dev/null; then
+            echo -e "${YELLOW}⚠️ Закешированные зеркала не работают, обновляем...${RESET}"
+            update_mirrors
+        fi
+        # Note: bind (DNS utils package) is installed via deps array
+    else
         update_mirrors
     fi
-    # Note: bind (DNS utils package) is installed via deps array
-else
-    update_mirrors
-fi
 
-# 5️⃣ Финальная синхронизация
-sudo pacman -Syy --noconfirm
-echo -e "${GREEN}✅ Mirrorlist готов${RESET}"
+    # 5️⃣ Финальная синхронизация
+    sudo pacman -Syy --noconfirm
+    mark_synced
+    echo -e "${GREEN}✅ Mirrorlist готов${RESET}"
+else
+    echo -e "${GREEN}⏩ Pacman sync skipped (last sync <${SYNC_COOLDOWN}s ago, use --force-sync to override)${RESET}"
+fi
 
 # ─────────────────────────────────────────────
 # 📦 Зависимости pacman
@@ -243,8 +280,12 @@ echo -e "${CYAN}📦 Installing VirtualBox and modules...${RESET}"
 # было: второй явный for-цикл; стало: тот же хелпер
 install_list "${vbox_pkgs[@]}"
 
-echo -e "${CYAN}📦 Loading vboxdrv module...${RESET}"
-sudo modprobe vboxdrv || echo -e "${YELLOW}⚠️ Не удалось загрузить vboxdrv — возможно, нужно перезагрузить систему${RESET}"
+if ! lsmod | grep -q '^vboxdrv'; then
+    echo -e "${CYAN}📦 Loading vboxdrv module...${RESET}"
+    sudo modprobe vboxdrv || echo -e "${YELLOW}⚠️ Не удалось загрузить vboxdrv — возможно, нужно перезагрузить систему${RESET}"
+else
+    echo -e "${GREEN}✅ vboxdrv already loaded${RESET}"
+fi
 
 echo -e "${CYAN}👤 Добавляем пользователя в группу vboxusers...${RESET}"
 sudo usermod -aG vboxusers "$USER"
@@ -411,13 +452,25 @@ echo -e "${GREEN}✅ Udev rule written to $UDEV_RULE${RESET}"
 
 
 # ─── 🌐 Локали ────────
-sudo sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
-sudo sed -i 's/^#ru_RU.UTF-8 UTF-8/ru_RU.UTF-8 UTF-8/' /etc/locale.gen
+LOCALE_CHANGED=0
+if ! grep -q '^en_US.UTF-8 UTF-8' /etc/locale.gen; then
+    sudo sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+    LOCALE_CHANGED=1
+fi
+if ! grep -q '^ru_RU.UTF-8 UTF-8' /etc/locale.gen; then
+    sudo sed -i 's/^#ru_RU.UTF-8 UTF-8/ru_RU.UTF-8 UTF-8/' /etc/locale.gen
+    LOCALE_CHANGED=1
+fi
 
-sudo locale-gen
+if [[ "$LOCALE_CHANGED" -eq 1 ]] || ! locale -a 2>/dev/null | grep -q 'en_US.utf8'; then
+    sudo locale-gen
+    echo -e "${GREEN}✅ Локали сгенерированы${RESET}"
+else
+    echo -e "${GREEN}✅ Локали уже настроены${RESET}"
+fi
 
-echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf
-echo 'KEYMAP=us' | sudo tee /etc/vconsole.conf
+echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf > /dev/null
+echo 'KEYMAP=us' | sudo tee /etc/vconsole.conf > /dev/null
 
 
 # Активируем службы systemd для звука (после установки пакетов)
