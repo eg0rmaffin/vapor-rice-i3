@@ -1,19 +1,21 @@
 #!/bin/bash
 # ─────────────────────────────────────────────
-# 🎧 Audio Policy Diagnostic
+# Audio Policy Diagnostic
 #    Verifies that the deterministic audio policy is correctly deployed.
 #
 #    Usage: audio-policy-check.sh
 #
 #    Checks:
-#      1. WirePlumber config files are deployed
-#      2. WirePlumber is running and loaded configs
-#      3. Bluetooth profile switching is disabled
-#      4. Stream routing policy is correct
-#      5. ALSA suspend policy is correct
-#      6. Current audio device status
+#      1. PipeWire virtual sink config deployed
+#      2. WirePlumber config files deployed
+#      3. PipeWire + WirePlumber services running
+#      4. Virtual Output sink exists and is default
+#      5. Bluetooth profile switching disabled
+#      6. Stream routing policy correct
+#      7. ALSA suspend policy correct
+#      8. Current audio device status
 #
-#    Dependencies: wireplumber, wpctl
+#    Dependencies: wireplumber, wpctl, pipewire
 # ─────────────────────────────────────────────
 
 GREEN="\033[0;32m"
@@ -42,15 +44,20 @@ echo ""
 
 # ─── 1. Config files deployed ───
 echo -e "${CYAN}📁 Config files:${RESET}"
+
+PW_DIR="$HOME/.config/pipewire/pipewire.conf.d"
 WP_DIR="$HOME/.config/wireplumber/wireplumber.conf.d"
 
-check "Bluetooth policy (51-audio-policy-bluetooth.conf)" \
+check "Virtual sink (pipewire: 50-virtual-sink.conf)" \
+    "$([ -f "$PW_DIR/50-virtual-sink.conf" ] && echo true || echo false)"
+
+check "Bluetooth policy (wireplumber: 51-audio-policy-bluetooth.conf)" \
     "$([ -f "$WP_DIR/51-audio-policy-bluetooth.conf" ] && echo true || echo false)"
 
-check "Stream policy (52-audio-policy-streams.conf)" \
+check "Stream policy (wireplumber: 52-audio-policy-streams.conf)" \
     "$([ -f "$WP_DIR/52-audio-policy-streams.conf" ] && echo true || echo false)"
 
-check "ALSA policy (53-audio-policy-alsa.conf)" \
+check "ALSA policy (wireplumber: 53-audio-policy-alsa.conf)" \
     "$([ -f "$WP_DIR/53-audio-policy-alsa.conf" ] && echo true || echo false)"
 
 echo ""
@@ -68,7 +75,29 @@ check "WirePlumber running" \
 
 echo ""
 
-# ─── 3. WirePlumber settings verification ───
+# ─── 3. Virtual Output sink ───
+echo -e "${CYAN}🔊 Virtual Output sink:${RESET}"
+if command -v wpctl &>/dev/null; then
+    # Check if virtual_output_sink exists in the graph
+    virtual_found=$(wpctl status 2>/dev/null | grep -c "virtual_output_sink" || true)
+    check "Virtual Output sink exists" \
+        "$([ "$virtual_found" -gt 0 ] && echo true || echo false)"
+
+    # Check if it is the default sink (marked with * in wpctl status)
+    default_virtual=$(wpctl status 2>/dev/null | grep -E '^\s*\*.*virtual_output_sink' || true)
+    if [ -n "$default_virtual" ]; then
+        check "Virtual Output is default sink" "true"
+    else
+        check "Virtual Output is default sink" "false"
+        echo -e "  ${YELLOW}  Hint: run 'wpctl set-default <id>' where <id> is the Virtual Output node ID${RESET}"
+    fi
+else
+    echo -e "  ${YELLOW}⚠️ wpctl not found${RESET}"
+fi
+
+echo ""
+
+# ─── 4. WirePlumber settings verification ───
 if command -v wpctl &>/dev/null; then
     echo -e "${CYAN}⚙️  WirePlumber active settings:${RESET}"
 
@@ -101,7 +130,7 @@ if command -v wpctl &>/dev/null; then
     echo ""
 fi
 
-# ─── 4. Audio device status ───
+# ─── 5. Audio device status ───
 echo -e "${CYAN}🔊 Current audio devices:${RESET}"
 if command -v wpctl &>/dev/null; then
     wpctl status 2>/dev/null | head -40
@@ -109,6 +138,13 @@ else
     echo -e "  ${YELLOW}⚠️ wpctl not found${RESET}"
 fi
 
+echo ""
+
+# ─── 6. Architecture diagram ───
+echo -e "${CYAN}📐 Expected audio architecture:${RESET}"
+echo "  App streams → [Virtual Output sink] → loopback → [physical device]"
+echo "  When BT connects:  loopback moves to BT   (apps unaffected)"
+echo "  When BT disconnects: loopback moves back   (apps unaffected)"
 echo ""
 
 # ─── Summary ───
