@@ -432,6 +432,9 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
     fi
 done
 
+# ─── 🎧 Deterministic audio policy (Windows-like) ───
+source ~/dotfiles/scripts/audio_policy.sh
+setup_audio_policy
 
 # ─── 🎨 Appearance policy (dark mode for browsers / portal / electron) ───
 if command -v gsettings >/dev/null && [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
@@ -465,7 +468,8 @@ mkdir -p ~/.local/bin
 ln -sf ~/dotfiles/scripts/osd/osd-panel.sh ~/.local/bin/osd-panel.sh
 ln -sf ~/dotfiles/scripts/osd/volume.sh ~/.local/bin/volume.sh
 ln -sf ~/dotfiles/scripts/osd/kbd-backlight.sh ~/.local/bin/kbd-backlight-osd.sh
-echo -e "${GREEN}✅ OSD scripts linked (volume, keyboard backlight)${RESET}"
+ln -sf ~/dotfiles/bin/audio-policy-check.sh ~/.local/bin/audio-policy-check.sh
+echo -e "${GREEN}✅ OSD scripts linked (volume, keyboard backlight, audio-policy-check)${RESET}"
 
 # ⚡ Power menu (Win95 vaporwave style)
 echo -e "${CYAN}⚡ Linking power-menu...${RESET}"
