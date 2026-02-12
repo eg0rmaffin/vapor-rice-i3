@@ -489,39 +489,57 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
     fi
 done
 
-# ─── 🎙 Microphone enhancement: try to install swh-plugins for limiter ───
+# ─── 🎙 Microphone enhancement: install swh-plugins for limiter ───
 # swh-plugins provides the fast_lookahead_limiter LADSPA plugin.
-# If installation fails (e.g., due to partial system update), we fall back
-# to a RNNoise-only pipeline that doesn't require external limiter.
-SWH_PLUGINS_INSTALLED=0
+# If installation fails due to dependency conflicts, prompt user to update system.
 if pacman -Q swh-plugins &>/dev/null; then
     echo -e "${GREEN}✅ swh-plugins already installed${RESET}"
-    SWH_PLUGINS_INSTALLED=1
 else
-    echo -e "${CYAN}🎙 Attempting to install swh-plugins (LADSPA limiter)...${RESET}"
-    # First, try a system update to resolve any version mismatches
-    echo -e "  ${CYAN}ℹ️  Checking for package version conflicts...${RESET}"
-    if sudo pacman -S --noconfirm swh-plugins 2>&1; then
+    echo -e "${CYAN}🎙 Installing swh-plugins (LADSPA limiter for Clean Mic)...${RESET}"
+
+    # Capture installation attempt output to detect dependency conflicts
+    INSTALL_OUTPUT=$(sudo pacman -S --noconfirm swh-plugins 2>&1)
+    INSTALL_STATUS=$?
+
+    if [ $INSTALL_STATUS -eq 0 ]; then
         echo -e "${GREEN}✅ swh-plugins installed successfully${RESET}"
-        SWH_PLUGINS_INSTALLED=1
     else
-        echo -e "${YELLOW}⚠️  swh-plugins installation failed (likely dependency conflict)${RESET}"
-        echo -e "  ${CYAN}ℹ️  Using RNNoise-only microphone pipeline (no limiter)${RESET}"
-        echo -e "  ${CYAN}ℹ️  To enable the limiter later, run: sudo pacman -Syu swh-plugins${RESET}"
-        SWH_PLUGINS_INSTALLED=0
+        # Check if it's a dependency conflict error
+        if echo "$INSTALL_OUTPUT" | grep -q "could not satisfy dependencies"; then
+            echo -e "${YELLOW}⚠️  Dependency conflict detected:${RESET}"
+            echo "$INSTALL_OUTPUT" | grep -E "(could not satisfy|breaks dependency)" | head -5
+            echo ""
+            echo -e "${CYAN}This usually happens when some packages are out of sync.${RESET}"
+            echo -e "${CYAN}A full system update will resolve this.${RESET}"
+            echo ""
+            echo -e -n "${YELLOW}Do you want to run 'sudo pacman -Syu' to update the system? [Y/n]: ${RESET}"
+            read -r REPLY
+            if [[ -z "$REPLY" || "$REPLY" =~ ^[Yy] ]]; then
+                echo -e "${CYAN}🔄 Running full system update...${RESET}"
+                sudo pacman -Syu --noconfirm
+                # Now try installing swh-plugins again
+                echo -e "${CYAN}🎙 Retrying swh-plugins installation...${RESET}"
+                if sudo pacman -S --noconfirm swh-plugins; then
+                    echo -e "${GREEN}✅ swh-plugins installed successfully after system update${RESET}"
+                else
+                    echo -e "${RED}❌ swh-plugins still failed to install. Please check the error above.${RESET}"
+                    echo -e "${RED}❌ Clean Mic feature will not work without swh-plugins.${RESET}"
+                    exit 1
+                fi
+            else
+                echo -e "${RED}❌ swh-plugins is required for Clean Mic feature.${RESET}"
+                echo -e "${RED}❌ Please run 'sudo pacman -Syu swh-plugins' manually and re-run install.sh${RESET}"
+                exit 1
+            fi
+        else
+            # Some other error
+            echo -e "${RED}❌ Failed to install swh-plugins:${RESET}"
+            echo "$INSTALL_OUTPUT"
+            exit 1
+        fi
     fi
 fi
-
-# Select the appropriate Clean Mic config based on swh-plugins availability
-# Export for audio_policy.sh to use
-export CLEAN_MIC_MODE
-if [ "$SWH_PLUGINS_INSTALLED" -eq 1 ]; then
-    CLEAN_MIC_MODE="full"
-    echo -e "${GREEN}✅ Clean Mic mode: full (RNNoise + Limiter)${RESET}"
-else
-    CLEAN_MIC_MODE="rnnoise-only"
-    echo -e "${YELLOW}✅ Clean Mic mode: rnnoise-only (no limiter)${RESET}"
-fi
+echo -e "${GREEN}✅ Clean Mic dependencies ready (RNNoise + Limiter)${RESET}"
 
 # ─── 🎧 Deterministic audio policy (Windows-like) ───
 source ~/dotfiles/scripts/audio_policy.sh
