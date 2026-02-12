@@ -42,7 +42,7 @@
 #      speakers sound too quiet even at 100% virtual sink volume.
 #
 #    Dependencies: wireplumber, pipewire, pipewire-pulse,
-#                  noise-suppression-for-voice, swh-plugins
+#                  noise-suppression-for-voice, swh-plugins (for limiter)
 # ─────────────────────────────────────────────
 
 setup_audio_policy() {
@@ -52,6 +52,7 @@ setup_audio_policy() {
     local pw_conf_dir="$HOME/.config/pipewire/pipewire.conf.d"
     mkdir -p "$pw_conf_dir"
 
+    # Deploy all PipeWire configs (including Clean Mic with full pipeline)
     for conf in ~/dotfiles/pipewire/*.conf; do
         local name
         name="$(basename "$conf")"

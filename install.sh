@@ -193,7 +193,8 @@ deps=(
     	sof-firmware
 	# Microphone processing (Clean Mic filter-chain)
 	noise-suppression-for-voice  # RNNoise LADSPA plugin for noise suppression
-	swh-plugins                  # LADSPA limiter (fast_lookahead_limiter)
+	# Note: swh-plugins (LADSPA limiter) is installed separately with error handling
+	# to avoid dependency conflicts on systems with partial updates
 	#utils
 	cbatticon #battery status icon in system tray
 	p7zip
@@ -487,6 +488,58 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
         echo -e "${YELLOW}⚠️ Служба $service не найдена, пропускаем${RESET}"
     fi
 done
+
+# ─── 🎙 Microphone enhancement: install swh-plugins for limiter ───
+# swh-plugins provides the fast_lookahead_limiter LADSPA plugin.
+# If installation fails due to dependency conflicts, prompt user to update system.
+if pacman -Q swh-plugins &>/dev/null; then
+    echo -e "${GREEN}✅ swh-plugins already installed${RESET}"
+else
+    echo -e "${CYAN}🎙 Installing swh-plugins (LADSPA limiter for Clean Mic)...${RESET}"
+
+    # Capture installation attempt output to detect dependency conflicts
+    INSTALL_OUTPUT=$(sudo pacman -S --noconfirm swh-plugins 2>&1)
+    INSTALL_STATUS=$?
+
+    if [ $INSTALL_STATUS -eq 0 ]; then
+        echo -e "${GREEN}✅ swh-plugins installed successfully${RESET}"
+    else
+        # Check if it's a dependency conflict error
+        if echo "$INSTALL_OUTPUT" | grep -q "could not satisfy dependencies"; then
+            echo -e "${YELLOW}⚠️  Dependency conflict detected:${RESET}"
+            echo "$INSTALL_OUTPUT" | grep -E "(could not satisfy|breaks dependency)" | head -5
+            echo ""
+            echo -e "${CYAN}This usually happens when some packages are out of sync.${RESET}"
+            echo -e "${CYAN}A full system update will resolve this.${RESET}"
+            echo ""
+            echo -e -n "${YELLOW}Do you want to run 'sudo pacman -Syu' to update the system? [Y/n]: ${RESET}"
+            read -r REPLY
+            if [[ -z "$REPLY" || "$REPLY" =~ ^[Yy] ]]; then
+                echo -e "${CYAN}🔄 Running full system update...${RESET}"
+                sudo pacman -Syu --noconfirm
+                # Now try installing swh-plugins again
+                echo -e "${CYAN}🎙 Retrying swh-plugins installation...${RESET}"
+                if sudo pacman -S --noconfirm swh-plugins; then
+                    echo -e "${GREEN}✅ swh-plugins installed successfully after system update${RESET}"
+                else
+                    echo -e "${RED}❌ swh-plugins still failed to install. Please check the error above.${RESET}"
+                    echo -e "${RED}❌ Clean Mic feature will not work without swh-plugins.${RESET}"
+                    exit 1
+                fi
+            else
+                echo -e "${RED}❌ swh-plugins is required for Clean Mic feature.${RESET}"
+                echo -e "${RED}❌ Please run 'sudo pacman -Syu swh-plugins' manually and re-run install.sh${RESET}"
+                exit 1
+            fi
+        else
+            # Some other error
+            echo -e "${RED}❌ Failed to install swh-plugins:${RESET}"
+            echo "$INSTALL_OUTPUT"
+            exit 1
+        fi
+    fi
+fi
+echo -e "${GREEN}✅ Clean Mic dependencies ready (RNNoise + Limiter)${RESET}"
 
 # ─── 🎧 Deterministic audio policy (Windows-like) ───
 source ~/dotfiles/scripts/audio_policy.sh
