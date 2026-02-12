@@ -42,7 +42,7 @@
 #      speakers sound too quiet even at 100% virtual sink volume.
 #
 #    Dependencies: wireplumber, pipewire, pipewire-pulse,
-#                  noise-suppression-for-voice, swh-plugins (for limiter)
+#                  noise-suppression-for-voice (optional, for Clean Mic)
 # ─────────────────────────────────────────────
 
 setup_audio_policy() {

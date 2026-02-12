@@ -3,9 +3,10 @@
 # Test script for install.sh graceful handling
 #
 # This script validates that:
-#   1. Clean Mic plugins are installed separately (not in main deps array)
+#   1. Clean Mic plugin is installed separately (not in main deps array)
 #   2. Plugin installation failures don't exit the script
 #   3. Proper warning messages are shown for failures
+#   4. swh-plugins (limiter) is NOT referenced (removed for version-tolerance)
 #
 # Usage: ./experiments/test-install-graceful.sh
 # ─────────────────────────────────────────────
@@ -38,14 +39,14 @@ else
     echo -e "  ${GREEN}✅ noise-suppression-for-voice NOT in main deps array (only in comments)${RESET}"
 fi
 
-# Test 2: No 'exit 1' after swh-plugins failure
-echo -e "${CYAN}Test 2: No 'exit 1' after swh-plugins section${RESET}"
-# Look for the old pattern that exits on failure
-if grep -A5 'swh-plugins' "$INSTALL_FILE" | grep -q 'exit 1'; then
-    echo -e "  ${RED}❌ Found 'exit 1' after swh-plugins - failures will abort install${RESET}"
+# Test 2: swh-plugins NOT installed (removed for version-tolerance)
+echo -e "${CYAN}Test 2: swh-plugins NOT installed (version-tolerance)${RESET}"
+# Check if install_list swh-plugins is called
+if grep -q 'install_list swh-plugins' "$INSTALL_FILE"; then
+    echo -e "  ${RED}❌ swh-plugins still being installed - should be removed for PipeWire 1.4.x${RESET}"
     exit 1
 else
-    echo -e "  ${GREEN}✅ No 'exit 1' after swh-plugins - failures are non-fatal${RESET}"
+    echo -e "  ${GREEN}✅ swh-plugins NOT installed (version-tolerant design)${RESET}"
 fi
 
 # Test 3: CLEAN_MIC_OK variable exists (graceful handling)
@@ -58,20 +59,20 @@ fi
 
 # Test 4: Warning messages for failures
 echo -e "${CYAN}Test 4: Warning messages for plugin failures${RESET}"
-if grep -q 'Clean Mic feature may be degraded' "$INSTALL_FILE"; then
+if grep -q 'Clean Mic.*will be unavailable\|Clean Mic feature' "$INSTALL_FILE"; then
     echo -e "  ${GREEN}✅ User-friendly warning messages present${RESET}"
 else
     echo -e "  ${YELLOW}⚠️  Warning messages may differ${RESET}"
 fi
 
-# Test 5: Recovery hint present
-echo -e "${CYAN}Test 5: Recovery instructions present${RESET}"
-if grep -q 'sudo pacman -Syu' "$INSTALL_FILE" | grep -q 'swh-plugins\|noise-suppression'; then
-    echo -e "  ${GREEN}✅ Recovery instructions (pacman -Syu) present${RESET}"
+# Test 5: Recovery hint present (RNNoise only, no swh-plugins)
+echo -e "${CYAN}Test 5: Recovery instructions present (RNNoise only)${RESET}"
+if grep 'pacman -Syu.*noise-suppression-for-voice' "$INSTALL_FILE" | grep -qv 'swh-plugins'; then
+    echo -e "  ${GREEN}✅ Recovery instructions (pacman -Syu noise-suppression-for-voice) present${RESET}"
 else
-    # Check with different pattern
-    if grep 'pacman -Syu' "$INSTALL_FILE" | grep -q 'swh-plugins'; then
-        echo -e "  ${GREEN}✅ Recovery instructions (pacman -Syu) present${RESET}"
+    # More lenient check
+    if grep -q 'pacman -Syu' "$INSTALL_FILE" && grep -q 'noise-suppression-for-voice' "$INSTALL_FILE"; then
+        echo -e "  ${GREEN}✅ Recovery instructions present${RESET}"
     else
         echo -e "  ${YELLOW}⚠️  Recovery instructions may differ${RESET}"
     fi
@@ -85,12 +86,21 @@ else
     echo -e "  ${YELLOW}⚠️  NON-FATAL documentation may be missing${RESET}"
 fi
 
+# Test 7: Limiter removal documented in comments
+echo -e "${CYAN}Test 7: Limiter removal explained in comments${RESET}"
+if grep -q 'Limiter.*removed\|version-tolerance\|port names.*vary' "$INSTALL_FILE"; then
+    echo -e "  ${GREEN}✅ Limiter removal reason documented${RESET}"
+else
+    echo -e "  ${YELLOW}⚠️  Limiter removal documentation may be missing${RESET}"
+fi
+
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 echo -e "${GREEN}✅ All tests passed - install.sh handles Clean Mic gracefully${RESET}"
 echo ""
 echo -e "${CYAN}Key safety features in install.sh:${RESET}"
-echo "  - Clean Mic plugins installed separately from main deps"
+echo "  - Clean Mic plugin (RNNoise) installed separately from main deps"
+echo "  - swh-plugins removed (version-tolerance for PipeWire 1.4.x)"
 echo "  - Plugin failures don't abort installation"
 echo "  - User gets clear warning + recovery instructions"
 echo "  - Audio baseline (output + routing) remains functional"
