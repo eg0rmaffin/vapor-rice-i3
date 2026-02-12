@@ -90,7 +90,7 @@ install_gpu_drivers() {
     # AMD GPU
     if lspci | grep -i 'vga\|3d\|display' | grep -i 'amd\|ati\|radeon' &>/dev/null; then
         echo -e "${CYAN}🔍 Найдена AMD GPU${RESET}"
-        for pkg in xf86-video-amdgpu mesa vulkan-radeon libva-mesa-driver mesa-vdpau; do
+        for pkg in xf86-video-amdgpu mesa vulkan-radeon libva-mesa-driver; do
             if ! check_package "$pkg"; then
                 install_package "$pkg"
             else
