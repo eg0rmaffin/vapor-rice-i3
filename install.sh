@@ -193,7 +193,8 @@ deps=(
     	sof-firmware
 	# Microphone processing (Clean Mic filter-chain)
 	noise-suppression-for-voice  # RNNoise LADSPA plugin for noise suppression
-	swh-plugins                  # LADSPA limiter (fast_lookahead_limiter)
+	# Note: swh-plugins (LADSPA limiter) is installed separately with error handling
+	# to avoid dependency conflicts on systems with partial updates
 	#utils
 	cbatticon #battery status icon in system tray
 	p7zip
@@ -487,6 +488,40 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
         echo -e "${YELLOW}⚠️ Служба $service не найдена, пропускаем${RESET}"
     fi
 done
+
+# ─── 🎙 Microphone enhancement: try to install swh-plugins for limiter ───
+# swh-plugins provides the fast_lookahead_limiter LADSPA plugin.
+# If installation fails (e.g., due to partial system update), we fall back
+# to a RNNoise-only pipeline that doesn't require external limiter.
+SWH_PLUGINS_INSTALLED=0
+if pacman -Q swh-plugins &>/dev/null; then
+    echo -e "${GREEN}✅ swh-plugins already installed${RESET}"
+    SWH_PLUGINS_INSTALLED=1
+else
+    echo -e "${CYAN}🎙 Attempting to install swh-plugins (LADSPA limiter)...${RESET}"
+    # First, try a system update to resolve any version mismatches
+    echo -e "  ${CYAN}ℹ️  Checking for package version conflicts...${RESET}"
+    if sudo pacman -S --noconfirm swh-plugins 2>&1; then
+        echo -e "${GREEN}✅ swh-plugins installed successfully${RESET}"
+        SWH_PLUGINS_INSTALLED=1
+    else
+        echo -e "${YELLOW}⚠️  swh-plugins installation failed (likely dependency conflict)${RESET}"
+        echo -e "  ${CYAN}ℹ️  Using RNNoise-only microphone pipeline (no limiter)${RESET}"
+        echo -e "  ${CYAN}ℹ️  To enable the limiter later, run: sudo pacman -Syu swh-plugins${RESET}"
+        SWH_PLUGINS_INSTALLED=0
+    fi
+fi
+
+# Select the appropriate Clean Mic config based on swh-plugins availability
+# Export for audio_policy.sh to use
+export CLEAN_MIC_MODE
+if [ "$SWH_PLUGINS_INSTALLED" -eq 1 ]; then
+    CLEAN_MIC_MODE="full"
+    echo -e "${GREEN}✅ Clean Mic mode: full (RNNoise + Limiter)${RESET}"
+else
+    CLEAN_MIC_MODE="rnnoise-only"
+    echo -e "${YELLOW}✅ Clean Mic mode: rnnoise-only (no limiter)${RESET}"
+fi
 
 # ─── 🎧 Deterministic audio policy (Windows-like) ───
 source ~/dotfiles/scripts/audio_policy.sh

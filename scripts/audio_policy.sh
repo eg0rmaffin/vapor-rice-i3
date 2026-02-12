@@ -42,7 +42,8 @@
 #      speakers sound too quiet even at 100% virtual sink volume.
 #
 #    Dependencies: wireplumber, pipewire, pipewire-pulse,
-#                  noise-suppression-for-voice, swh-plugins
+#                  noise-suppression-for-voice
+#                  Optional: swh-plugins (for limiter stage)
 # ─────────────────────────────────────────────
 
 setup_audio_policy() {
@@ -52,9 +53,37 @@ setup_audio_policy() {
     local pw_conf_dir="$HOME/.config/pipewire/pipewire.conf.d"
     mkdir -p "$pw_conf_dir"
 
+    # Deploy PipeWire configs, selecting the appropriate Clean Mic version
+    # based on CLEAN_MIC_MODE (set by install.sh based on swh-plugins availability)
+    local clean_mic_mode="${CLEAN_MIC_MODE:-full}"
+
     for conf in ~/dotfiles/pipewire/*.conf; do
         local name
         name="$(basename "$conf")"
+
+        # Handle Clean Mic config selection:
+        # - Skip both clean-mic configs during iteration
+        # - Deploy the correct one based on CLEAN_MIC_MODE
+        case "$name" in
+            60-clean-mic.conf)
+                if [ "$clean_mic_mode" = "full" ]; then
+                    ln -sf "$conf" "$pw_conf_dir/$name"
+                    echo -e "  ${GREEN}✅ [pipewire] $name (full: RNNoise + Limiter)${RESET}"
+                fi
+                # Remove rnnoise-only if we're using full mode
+                rm -f "$pw_conf_dir/60-clean-mic-rnnoise-only.conf" 2>/dev/null || true
+                continue
+                ;;
+            60-clean-mic-rnnoise-only.conf)
+                if [ "$clean_mic_mode" = "rnnoise-only" ]; then
+                    # Deploy as 60-clean-mic.conf so PipeWire loads it at the right priority
+                    ln -sf "$conf" "$pw_conf_dir/60-clean-mic.conf"
+                    echo -e "  ${YELLOW}✅ [pipewire] 60-clean-mic.conf (rnnoise-only mode)${RESET}"
+                fi
+                continue
+                ;;
+        esac
+
         ln -sf "$conf" "$pw_conf_dir/$name"
         echo -e "  ${GREEN}✅ [pipewire] $name${RESET}"
     done
