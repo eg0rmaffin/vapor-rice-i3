@@ -178,9 +178,8 @@ echo ""
 # ─── 6. Clean Mic (microphone enhancement) ───
 echo -e "${CYAN}🎙 Clean Mic (optional microphone enhancement):${RESET}"
 
-# Check if LADSPA plugins are installed
+# Check if RNNoise LADSPA plugin is installed
 rnnoise_ok="false"
-limiter_ok="false"
 
 # Check RNNoise plugin
 if [ -f /usr/lib/ladspa/librnnoise_ladspa.so ] || [ -f /usr/lib64/ladspa/librnnoise_ladspa.so ]; then
@@ -188,11 +187,9 @@ if [ -f /usr/lib/ladspa/librnnoise_ladspa.so ] || [ -f /usr/lib64/ladspa/librnno
 fi
 check "RNNoise plugin installed" "$rnnoise_ok"
 
-# Check swh-plugins limiter
-if [ -f /usr/lib/ladspa/fast_lookahead_limiter_1913.so ] || [ -f /usr/lib64/ladspa/fast_lookahead_limiter_1913.so ]; then
-    limiter_ok="true"
-fi
-check "Limiter plugin installed (swh-plugins)" "$limiter_ok"
+# NOTE: Limiter (swh-plugins) check removed.
+# The fast_lookahead_limiter uses port names that vary between PipeWire versions,
+# causing filter-chain failures on PipeWire 1.4.x. Clean Mic now uses RNNoise only.
 
 # Check if Clean Mic filter-chain is running
 if command -v wpctl &>/dev/null; then
@@ -210,14 +207,14 @@ if command -v wpctl &>/dev/null; then
             echo -e "  ${YELLOW}  Hint: run 'wpctl set-default <id>' where <id> is the Clean Mic node ID${RESET}"
         fi
     else
-        if [ "$rnnoise_ok" = "true" ] && [ "$limiter_ok" = "true" ]; then
-            echo -e "  ${YELLOW}⚠️ Clean Mic filter-chain not running (plugins present, may need restart)${RESET}"
+        if [ "$rnnoise_ok" = "true" ]; then
+            echo -e "  ${YELLOW}⚠️ Clean Mic filter-chain not running (plugin present, may need restart)${RESET}"
             echo -e "  ${YELLOW}  Hint: Log out and log back in, or run: systemctl --user restart pipewire wireplumber${RESET}"
         else
-            echo -e "  ${YELLOW}⚠️ Clean Mic not active (missing LADSPA plugins)${RESET}"
-            echo -e "  ${YELLOW}  This is NORMAL if plugins failed to install due to dependency conflicts.${RESET}"
+            echo -e "  ${YELLOW}⚠️ Clean Mic not active (missing RNNoise plugin)${RESET}"
+            echo -e "  ${YELLOW}  This is NORMAL if plugin failed to install due to dependency conflicts.${RESET}"
             echo -e "  ${YELLOW}  Audio baseline still works. To enable Clean Mic later:${RESET}"
-            echo -e "  ${YELLOW}    sudo pacman -Syu && sudo pacman -S noise-suppression-for-voice swh-plugins${RESET}"
+            echo -e "  ${YELLOW}    sudo pacman -Syu && sudo pacman -S noise-suppression-for-voice${RESET}"
         fi
     fi
 else
@@ -245,9 +242,9 @@ echo "  When BT connects:  loopback moves to BT   (apps unaffected)"
 echo "  When BT disconnects: loopback moves back   (apps unaffected)"
 echo ""
 echo -e "  ${CYAN}Input (optional Clean Mic enhancement):${RESET}"
-echo "  [Hardware Mic] → RNNoise → Limiter → [Clean Mic] ← App input streams"
+echo "  [Hardware Mic] → RNNoise → [Clean Mic] ← App input streams"
 echo "  When mic hotplug: filter-chain rebinds to new hardware automatically"
-echo "  If plugins missing: Clean Mic not available, raw hardware mic is used"
+echo "  If RNNoise missing: Clean Mic not available, raw hardware mic is used"
 echo ""
 
 # ─── Summary ───

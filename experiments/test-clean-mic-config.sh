@@ -84,20 +84,33 @@ else
     exit 1
 fi
 
-# Test 7: Limiter plugin reference
-echo -e "${CYAN}Test 7: Limiter plugin configured${RESET}"
-if grep -q 'fast_lookahead_limiter_1913' "$CONFIG_FILE"; then
-    echo -e "  ${GREEN}✅ Limiter (fast_lookahead_limiter_1913) configured${RESET}"
+# Test 7: No limiter plugin in filter.graph.nodes (removed for version-tolerance)
+echo -e "${CYAN}Test 7: Limiter plugin NOT configured (version-tolerance)${RESET}"
+# Check for actual limiter node configuration, not just comments mentioning it
+if grep -v '^\s*#' "$CONFIG_FILE" | grep -q 'fast_lookahead_limiter'; then
+    echo -e "  ${RED}❌ Limiter still present - should be removed for PipeWire 1.4.x compatibility${RESET}"
+    exit 1
 else
-    echo -e "  ${RED}❌ Limiter plugin not found in config${RESET}"
+    echo -e "  ${GREEN}✅ Limiter removed (version-tolerant design)${RESET}"
+fi
+
+# Test 8: Single-node graph (RNNoise only)
+echo -e "${CYAN}Test 8: Single-node graph configuration${RESET}"
+if grep -q 'inputs.*=.*\[.*"rnnoise:Input".*\]' "$CONFIG_FILE" && \
+   grep -q 'outputs.*=.*\[.*"rnnoise:Output".*\]' "$CONFIG_FILE"; then
+    echo -e "  ${GREEN}✅ Single-node graph: rnnoise input/output correctly configured${RESET}"
+else
+    echo -e "  ${RED}❌ Graph input/output not correctly configured${RESET}"
     exit 1
 fi
 
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-echo -e "${GREEN}✅ All tests passed - Clean Mic config is robust${RESET}"
+echo -e "${GREEN}✅ All tests passed - Clean Mic config is version-tolerant${RESET}"
 echo ""
 echo -e "${CYAN}Key safety features:${RESET}"
-echo "  - 'nofail' flag: PipeWire won't crash if plugins fail to load"
+echo "  - 'nofail' flag: PipeWire won't crash if RNNoise fails to load"
 echo "  - 'ifexists' flag: module skipped if binary doesn't exist"
+echo "  - Limiter removed: no hardcoded port names that break on PipeWire updates"
+echo "  - RNNoise-only: uses stable noise_suppressor_mono label"
 echo "  - Clean Mic is an optional enhancement, not a hard dependency"

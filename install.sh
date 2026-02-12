@@ -391,8 +391,8 @@ deps=(
     	pamixer
     	pavucontrol
     	sof-firmware
-	# Note: Microphone processing plugins (noise-suppression-for-voice, swh-plugins)
-	# are installed SEPARATELY below with graceful error handling.
+	# Note: Microphone processing plugin (noise-suppression-for-voice)
+	# is installed SEPARATELY below with graceful error handling.
 	# Clean Mic is an optional enhancement — installation failures don't break audio.
 	#utils
 	cbatticon #battery status icon in system tray
@@ -679,20 +679,24 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
     fi
 done
 
-# ─── 🎙 Microphone enhancement: Clean Mic LADSPA plugins (OPTIONAL) ───
-# These plugins enable the Clean Mic filter-chain:
+# ─── 🎙 Microphone enhancement: Clean Mic RNNoise plugin (OPTIONAL) ───
+# This plugin enables the Clean Mic filter-chain:
 #   - noise-suppression-for-voice: RNNoise for background noise removal
-#   - swh-plugins: fast_lookahead_limiter for clipping prevention
+#
+# NOTE: Limiter (swh-plugins) removed for version-tolerance.
+#   The fast_lookahead_limiter uses port names that vary between PipeWire versions,
+#   causing filter-chain failures on PipeWire 1.4.x. RNNoise alone provides the
+#   primary value (noise reduction) and is stable across all PipeWire versions.
 #
 # IMPORTANT: This is NON-FATAL. Clean Mic is an optional enhancement layer.
-# If these plugins fail to install due to dependency conflicts:
+# If plugin fails to install due to dependency conflicts:
 #   - PipeWire will still start (thanks to 'nofail' flag in 60-clean-mic.conf)
 #   - All other audio functionality continues to work
-#   - Only the noise-suppression/limiter feature is unavailable
+#   - Only the noise-suppression feature is unavailable
 #
 # The user can retry installation after a full system update:
-#   sudo pacman -Syu && sudo pacman -S noise-suppression-for-voice swh-plugins
-echo -e "${CYAN}🎙 Installing Clean Mic plugins (RNNoise + Limiter)...${RESET}"
+#   sudo pacman -Syu && sudo pacman -S noise-suppression-for-voice
+echo -e "${CYAN}🎙 Installing Clean Mic plugin (RNNoise)...${RESET}"
 
 CLEAN_MIC_OK=1
 
@@ -705,22 +709,13 @@ else
     CLEAN_MIC_OK=0
 fi
 
-# Install swh-plugins (limiter)
-echo -e "${CYAN}📦 Installing swh-plugins...${RESET}"
-if install_list swh-plugins; then
-    echo -e "${GREEN}✅ swh-plugins installed${RESET}"
-else
-    echo -e "${YELLOW}⚠️  swh-plugins failed to install${RESET}"
-    CLEAN_MIC_OK=0
-fi
-
 # Report Clean Mic status
 if [ "$CLEAN_MIC_OK" -eq 1 ]; then
-    echo -e "${GREEN}✅ Clean Mic dependencies ready (RNNoise + Limiter)${RESET}"
+    echo -e "${GREEN}✅ Clean Mic dependency ready (RNNoise)${RESET}"
 else
-    echo -e "${YELLOW}⚠️  Clean Mic plugins incomplete (dependency conflict?)${RESET}"
-    echo -e "${YELLOW}   Clean Mic feature may be degraded until dependencies resolve.${RESET}"
-    echo -e "${YELLOW}   Try: sudo pacman -Syu && sudo pacman -S noise-suppression-for-voice swh-plugins${RESET}"
+    echo -e "${YELLOW}⚠️  Clean Mic plugin failed to install (dependency conflict?)${RESET}"
+    echo -e "${YELLOW}   Clean Mic feature will be unavailable until dependency resolves.${RESET}"
+    echo -e "${YELLOW}   Try: sudo pacman -Syu && sudo pacman -S noise-suppression-for-voice${RESET}"
     echo -e "${YELLOW}   Note: Audio baseline (output + routing) will still work normally.${RESET}"
 fi
 
