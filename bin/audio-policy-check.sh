@@ -59,6 +59,12 @@ check "Stream policy (wireplumber: 52-audio-policy-streams.conf)" \
 check "ALSA policy (wireplumber: 53-audio-policy-alsa.conf)" \
     "$([ -f "$WP_DIR/53-audio-policy-alsa.conf" ] && echo true || echo false)"
 
+check "Mic policy (wireplumber: 54-audio-policy-mic.conf)" \
+    "$([ -f "$WP_DIR/54-audio-policy-mic.conf" ] && echo true || echo false)"
+
+check "Clean Mic (pipewire: 60-clean-mic.conf)" \
+    "$([ -f "$PW_DIR/60-clean-mic.conf" ] && echo true || echo false)"
+
 echo ""
 
 # ─── 2. Services running ───
@@ -169,7 +175,58 @@ fi
 
 echo ""
 
-# ─── 6. Audio device status ───
+# ─── 6. Clean Mic (microphone enhancement) ───
+echo -e "${CYAN}🎙 Clean Mic (optional microphone enhancement):${RESET}"
+
+# Check if LADSPA plugins are installed
+rnnoise_ok="false"
+limiter_ok="false"
+
+# Check RNNoise plugin
+if [ -f /usr/lib/ladspa/librnnoise_ladspa.so ] || [ -f /usr/lib64/ladspa/librnnoise_ladspa.so ]; then
+    rnnoise_ok="true"
+fi
+check "RNNoise plugin installed" "$rnnoise_ok"
+
+# Check swh-plugins limiter
+if [ -f /usr/lib/ladspa/fast_lookahead_limiter_1913.so ] || [ -f /usr/lib64/ladspa/fast_lookahead_limiter_1913.so ]; then
+    limiter_ok="true"
+fi
+check "Limiter plugin installed (swh-plugins)" "$limiter_ok"
+
+# Check if Clean Mic filter-chain is running
+if command -v wpctl &>/dev/null; then
+    clean_mic_found=$(wpctl status 2>/dev/null | grep -c "clean_mic" || true)
+    if [ "$clean_mic_found" -gt 0 ]; then
+        check "Clean Mic filter-chain running" "true"
+
+        # Check if Clean Mic is the default source
+        clean_mic_id=$(wpctl status 2>/dev/null | grep -i "clean_mic" | grep -v "capture" | grep -o '[0-9]*' | head -1)
+        default_source_id=$(wpctl inspect @DEFAULT_AUDIO_SOURCE@ 2>/dev/null | grep -o 'id [0-9]*' | grep -o '[0-9]*' | head -1)
+        if [ -n "$default_source_id" ] && [ -n "$clean_mic_id" ] && [ "$default_source_id" = "$clean_mic_id" ]; then
+            check "Clean Mic is default source" "true"
+        else
+            check "Clean Mic is default source" "false"
+            echo -e "  ${YELLOW}  Hint: run 'wpctl set-default <id>' where <id> is the Clean Mic node ID${RESET}"
+        fi
+    else
+        if [ "$rnnoise_ok" = "true" ] && [ "$limiter_ok" = "true" ]; then
+            echo -e "  ${YELLOW}⚠️ Clean Mic filter-chain not running (plugins present, may need restart)${RESET}"
+            echo -e "  ${YELLOW}  Hint: Log out and log back in, or run: systemctl --user restart pipewire wireplumber${RESET}"
+        else
+            echo -e "  ${YELLOW}⚠️ Clean Mic not active (missing LADSPA plugins)${RESET}"
+            echo -e "  ${YELLOW}  This is NORMAL if plugins failed to install due to dependency conflicts.${RESET}"
+            echo -e "  ${YELLOW}  Audio baseline still works. To enable Clean Mic later:${RESET}"
+            echo -e "  ${YELLOW}    sudo pacman -Syu && sudo pacman -S noise-suppression-for-voice swh-plugins${RESET}"
+        fi
+    fi
+else
+    echo -e "  ${YELLOW}⚠️ wpctl not found${RESET}"
+fi
+
+echo ""
+
+# ─── 7. Audio device status ───
 echo -e "${CYAN}🔊 Current audio devices:${RESET}"
 if command -v wpctl &>/dev/null; then
     wpctl status 2>/dev/null | head -40
@@ -179,11 +236,18 @@ fi
 
 echo ""
 
-# ─── 7. Architecture diagram ───
+# ─── 8. Architecture diagram ───
 echo -e "${CYAN}📐 Expected audio architecture:${RESET}"
+echo ""
+echo -e "  ${CYAN}Output (always active):${RESET}"
 echo "  App streams → [Virtual Output sink] → loopback → [physical device]"
 echo "  When BT connects:  loopback moves to BT   (apps unaffected)"
 echo "  When BT disconnects: loopback moves back   (apps unaffected)"
+echo ""
+echo -e "  ${CYAN}Input (optional Clean Mic enhancement):${RESET}"
+echo "  [Hardware Mic] → RNNoise → Limiter → [Clean Mic] ← App input streams"
+echo "  When mic hotplug: filter-chain rebinds to new hardware automatically"
+echo "  If plugins missing: Clean Mic not available, raw hardware mic is used"
 echo ""
 
 # ─── Summary ───
