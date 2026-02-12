@@ -6,17 +6,25 @@ set -e
 GREEN="\033[0;32m"
 YELLOW="\033[1;33m"
 CYAN="\033[0;36m"
+RED="\033[0;31m"
 RESET="\033[0m"
 
 # ─────────────────────────────────────────────
-# ⏱ Sync cache: skip pacman -Sy if already synced recently
+# ⏱ Sync cache: skip pacman sync if already done recently
 # Override: pass --force-sync or set FORCE_SYNC=1
+# NEW: --upgrade flag to force full system upgrade
+# NEW: --no-upgrade flag to skip upgrade even when sync is needed
 SYNC_COOLDOWN=3600  # seconds (1 hour)
 SYNC_STAMP="$HOME/.cache/vapor-rice/last-sync"
+UPGRADE_STAMP="$HOME/.cache/vapor-rice/last-upgrade"
 
 FORCE_SYNC=0
+FORCE_UPGRADE=0
+NO_UPGRADE=0
 for arg in "$@"; do
     [[ "$arg" == "--force-sync" ]] && FORCE_SYNC=1
+    [[ "$arg" == "--upgrade" ]] && FORCE_UPGRADE=1
+    [[ "$arg" == "--no-upgrade" ]] && NO_UPGRADE=1
 done
 
 needs_sync() {
@@ -34,18 +42,157 @@ mark_synced() {
     date +%s > "$SYNC_STAMP"
 }
 
+mark_upgraded() {
+    mkdir -p "$(dirname "$UPGRADE_STAMP")"
+    date +%s > "$UPGRADE_STAMP"
+}
+
 # ─────────────────────────────────────────────
-# 🧩 helper: установка списков пакетов
-install_list() {
-  local -a pkgs=("$@")
-  for pkg in "${pkgs[@]}"; do
-    if ! pacman -Q "$pkg" &>/dev/null; then
-      echo -e "${YELLOW}📦 Installing $pkg...${RESET}"
-      sudo pacman -S --noconfirm "$pkg"
-    else
-      echo -e "${GREEN}✅ $pkg already installed${RESET}"
+# 🔐 Keyring: ensure pacman keyring is initialized and valid
+# Fixes: marginal trust issues, broken keyring state
+ensure_keyring() {
+    echo -e "${CYAN}🔐 Checking pacman keyring...${RESET}"
+
+    # Check if keyring directory exists
+    if [ ! -d /etc/pacman.d/gnupg ]; then
+        echo -e "${YELLOW}⚠️  Keyring not initialized, setting up...${RESET}"
+        sudo pacman-key --init
+        sudo pacman-key --populate archlinux
+        echo -e "${GREEN}✅ Keyring initialized${RESET}"
+        return 0
     fi
-  done
+
+    # Check for marginal trust issues by looking at trustdb
+    # If we detect issues, rebuild the trustdb
+    local trust_check
+    trust_check=$(sudo pacman-key --list-keys 2>&1 || true)
+    if echo "$trust_check" | grep -q "marginal" || echo "$trust_check" | grep -q "unknown"; then
+        echo -e "${YELLOW}⚠️  Detected trust issues in keyring, refreshing...${RESET}"
+        sudo pacman-key --refresh-keys 2>/dev/null || true
+        sudo pacman-key --populate archlinux
+        echo -e "${GREEN}✅ Keyring refreshed${RESET}"
+    else
+        echo -e "${GREEN}✅ Keyring OK${RESET}"
+    fi
+}
+
+# ─────────────────────────────────────────────
+# 🔄 System Consistency: Arch-safe upgrade boundary
+# CRITICAL: Never refresh DB without full upgrade
+# This is THE core function that prevents partial upgrades
+ensure_system_consistency() {
+    local need_upgrade=0
+
+    # Force upgrade if explicitly requested
+    if [[ "$FORCE_UPGRADE" -eq 1 ]]; then
+        echo -e "${CYAN}🔄 Full system upgrade requested (--upgrade flag)${RESET}"
+        need_upgrade=1
+    fi
+
+    # If we need sync and not explicitly skipping upgrade, we must upgrade
+    if needs_sync && [[ "$NO_UPGRADE" -eq 0 ]] && [[ "$need_upgrade" -eq 0 ]]; then
+        echo -e "${CYAN}🔄 Database refresh needed — performing full system upgrade (Arch policy)${RESET}"
+        need_upgrade=1
+    fi
+
+    if [[ "$need_upgrade" -eq 1 ]]; then
+        # Ensure keyring is valid before upgrade
+        ensure_keyring
+
+        echo -e "${CYAN}🔄 Running full system upgrade (pacman -Syu)...${RESET}"
+        sudo pacman -Syu --noconfirm
+        mark_synced
+        mark_upgraded
+        echo -e "${GREEN}✅ System upgraded and synced${RESET}"
+    elif [[ "$NO_UPGRADE" -eq 1 ]] && needs_sync; then
+        echo -e "${YELLOW}⚠️  Sync needed but --no-upgrade specified${RESET}"
+        echo -e "${YELLOW}⚠️  WARNING: This may cause partial upgrade issues!${RESET}"
+        echo -e "${YELLOW}⚠️  Use at your own risk.${RESET}"
+        # Still sync DB but warn about partial upgrade risk
+        sudo pacman -Sy --noconfirm
+        mark_synced
+    else
+        echo -e "${GREEN}⏩ System already consistent (last sync <${SYNC_COOLDOWN}s ago)${RESET}"
+    fi
+}
+
+# ─────────────────────────────────────────────
+# 🔧 AUR Helper: self-healing yay installation
+# Detects libalpm mismatch and auto-rebuilds
+ensure_aur_helper() {
+    echo -e "${CYAN}🔧 Checking AUR helper (yay)...${RESET}"
+
+    local yay_path
+    yay_path=$(command -v yay 2>/dev/null || true)
+
+    # Check if yay exists
+    if [ -z "$yay_path" ]; then
+        echo -e "${YELLOW}📦 yay not found, installing...${RESET}"
+        _install_yay
+        return 0
+    fi
+
+    # Check if yay works (catches libalpm mismatch)
+    if ! yay --version &>/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  yay is broken (likely libalpm mismatch), rebuilding...${RESET}"
+        _rebuild_yay
+        return 0
+    fi
+
+    # Deep check: verify libalpm linkage
+    local ldd_output
+    ldd_output=$(ldd "$yay_path" 2>&1 || true)
+    if echo "$ldd_output" | grep -q "not found"; then
+        echo -e "${YELLOW}⚠️  yay has missing library dependencies, rebuilding...${RESET}"
+        _rebuild_yay
+        return 0
+    fi
+
+    echo -e "${GREEN}✅ yay is working${RESET}"
+}
+
+_install_yay() {
+    local tmp_dir="/tmp/yay-install-$$"
+    git clone https://aur.archlinux.org/yay.git "$tmp_dir"
+    pushd "$tmp_dir" > /dev/null
+    makepkg -si --noconfirm
+    popd > /dev/null
+    rm -rf "$tmp_dir"
+    echo -e "${GREEN}✅ yay installed${RESET}"
+}
+
+_rebuild_yay() {
+    # Remove broken yay first
+    sudo pacman -Rns --noconfirm yay 2>/dev/null || true
+
+    # Rebuild from AUR
+    _install_yay
+    echo -e "${GREEN}✅ yay rebuilt successfully${RESET}"
+}
+
+# ─────────────────────────────────────────────
+# 🧩 helper: установка списков пакетов (declarative, idempotent)
+# Uses --needed flag for efficient batch installation
+install_list() {
+    local -a pkgs=("$@")
+    local -a missing=()
+
+    # Filter to only missing packages (for cleaner output)
+    for pkg in "${pkgs[@]}"; do
+        if ! pacman -Q "$pkg" &>/dev/null; then
+            missing+=("$pkg")
+        fi
+    done
+
+    if [ ${#missing[@]} -eq 0 ]; then
+        echo -e "${GREEN}✅ All packages already installed${RESET}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}📦 Installing ${#missing[@]} packages: ${missing[*]::5}...${RESET}"
+    # Use --needed for idempotency (won't reinstall if already installed)
+    sudo pacman -S --needed --noconfirm "${pkgs[@]}"
+    echo -e "${GREEN}✅ Packages installed${RESET}"
 }
 
 # ─────────────────────────────────────────────
@@ -70,78 +217,86 @@ fi
 
 # ─────────────────────────────────────────────
 # ─────────────────────────────────────────────
-# 🌐 Обновление зеркал и синхронизация pacman
+# 🌐 Mirror management and system consistency
+#
+# ARCH SAFETY RULE: Never refresh pacman DB without full upgrade!
+# This section handles mirrors separately from DB sync.
 
-# Force sync when multilib was just enabled (new repos need db download)
+# Force sync/upgrade when multilib was just enabled (new repos need db download)
 if [[ "$MULTILIB_CHANGED" -eq 1 ]]; then
     FORCE_SYNC=1
+    FORCE_UPGRADE=1  # multilib change requires full upgrade
 fi
 
-if needs_sync; then
-    echo -e "${CYAN}🌐 Проверяем зеркала...${RESET}"
+# ─────────────────────────────────────────────
+# 🪞 Mirror configuration (separate from pacman sync)
+# This ONLY touches /etc/pacman.d/mirrorlist, NOT pacman DB
 
-    MIRROR_CACHE="$HOME/.cache/mirrorlist"
-    CACHE_AGE_DAYS=7
+MIRROR_CACHE="$HOME/.cache/mirrorlist"
+CACHE_AGE_DAYS=7
 
-    # 1️⃣ Убедимся, что reflector установлен
+# Helper: test if a mirror URL is reachable (no pacman DB refresh!)
+test_mirror_reachable() {
+    local mirror_url="$1"
+    # Use curl to check if mirror is reachable, NOT pacman -Sy
+    curl -sI --connect-timeout 5 --max-time 10 "$mirror_url" >/dev/null 2>&1
+}
+
+# Helper: update mirrors via reflector
+update_mirrors() {
+    echo -e "${CYAN}🔄 Обновляем зеркала через reflector (~1 мин)...${RESET}"
+
+    # Ensure reflector is installed (--needed is idempotent)
     if ! command -v reflector &>/dev/null; then
-        echo -e "${YELLOW}📦 Устанавливаем reflector...${RESET}"
-        sudo pacman -S --noconfirm reflector
+        echo -e "${YELLOW}📦 Installing reflector...${RESET}"
+        sudo pacman -S --needed --noconfirm reflector
     fi
 
-    # 2️⃣ Бэкапим текущий список
-    sudo cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
+    echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /tmp/mirrorlist.new
 
-    # 3️⃣ Функция обновления зеркал
-    update_mirrors() {
-        echo -e "${CYAN}🔄 Обновляем зеркала через reflector (~1 мин)...${RESET}"
+    if sudo reflector \
+        --country Russia,Kazakhstan,Germany,Netherlands,Sweden,Finland \
+        --protocol https \
+        --ipv4 \
+        --connection-timeout 15 \
+        --download-timeout 15 \
+        --latest 10 \
+        --sort rate \
+        --save /tmp/mirrorlist.reflector 2>/dev/null && \
+       grep -q '^Server' /tmp/mirrorlist.reflector; then
 
-        echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /tmp/mirrorlist.new
-
-        if sudo reflector \
-            --country Russia,Kazakhstan,Germany,Netherlands,Sweden,Finland \
-            --protocol https \
-            --ipv4 \
-            --connection-timeout 15 \
-            --download-timeout 15 \
-            --latest 10 \
-            --sort rate \
-            --save /tmp/mirrorlist.reflector 2>/dev/null && \
-           grep -q '^Server' /tmp/mirrorlist.reflector; then
-
-            cat /tmp/mirrorlist.reflector >> /tmp/mirrorlist.new
-            echo -e "${GREEN}✅ Добавлено $(grep -c '^Server' /tmp/mirrorlist.reflector) зеркал${RESET}"
-        else
-            echo -e "${YELLOW}⚠️ Reflector не отработал, используем только geo CDN${RESET}"
-        fi
-
-        mkdir -p "$(dirname "$MIRROR_CACHE")"
-        cp /tmp/mirrorlist.new "$MIRROR_CACHE"
-        sudo mv /tmp/mirrorlist.new /etc/pacman.d/mirrorlist
-    }
-
-    # 4️⃣ Проверяем кеш
-    if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAYS 2>/dev/null)" ]; then
-        echo -e "${GREEN}✅ Используем закешированные зеркала (<$CACHE_AGE_DAYS дней)${RESET}"
-        sudo cp "$MIRROR_CACHE" /etc/pacman.d/mirrorlist
-
-        # Проверяем, работают ли зеркала
-        if ! sudo pacman -Sy --noconfirm 2>/dev/null; then
-            echo -e "${YELLOW}⚠️ Закешированные зеркала не работают, обновляем...${RESET}"
-            update_mirrors
-        fi
-        # Note: bind (DNS utils package) is installed via deps array
+        cat /tmp/mirrorlist.reflector >> /tmp/mirrorlist.new
+        echo -e "${GREEN}✅ Добавлено $(grep -c '^Server' /tmp/mirrorlist.reflector) зеркал${RESET}"
     else
+        echo -e "${YELLOW}⚠️ Reflector не отработал, используем только geo CDN${RESET}"
+    fi
+
+    mkdir -p "$(dirname "$MIRROR_CACHE")"
+    cp /tmp/mirrorlist.new "$MIRROR_CACHE"
+    sudo mv /tmp/mirrorlist.new /etc/pacman.d/mirrorlist
+    echo -e "${GREEN}✅ Mirrorlist updated${RESET}"
+}
+
+# Check if mirrors need updating (independent of pacman sync)
+if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAYS 2>/dev/null)" ]; then
+    echo -e "${GREEN}✅ Используем закешированные зеркала (<$CACHE_AGE_DAYS дней)${RESET}"
+    sudo cp "$MIRROR_CACHE" /etc/pacman.d/mirrorlist
+
+    # Validate mirrors work using curl (NOT pacman -Sy)
+    if ! test_mirror_reachable "https://geo.mirror.pkgbuild.com/core/os/x86_64/"; then
+        echo -e "${YELLOW}⚠️ Cached mirrors unreachable, refreshing...${RESET}"
         update_mirrors
     fi
-
-    # 5️⃣ Финальная синхронизация
-    sudo pacman -Syy --noconfirm
-    mark_synced
-    echo -e "${GREEN}✅ Mirrorlist готов${RESET}"
 else
-    echo -e "${GREEN}⏩ Pacman sync skipped (last sync <${SYNC_COOLDOWN}s ago, use --force-sync to override)${RESET}"
+    # Backup current mirrorlist before updating
+    sudo cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
+    update_mirrors
 fi
+
+# ─────────────────────────────────────────────
+# 🔄 CRITICAL: Arch-safe system consistency check
+# This is THE place where pacman DB is synced (always with full upgrade)
+ensure_system_consistency
 
 # ─────────────────────────────────────────────
 # 📦 Зависимости pacman
@@ -232,19 +387,10 @@ deps=(
 # было: явный for-цикл; стало: вызов хелпера
 install_list "${deps[@]}"
 
-#-------- AUR pacs ----------
-
-if ! command -v yay &>/dev/null; then
-    echo -e "${YELLOW}📦 yay не найден, клонируем и устанавливаем...${RESET}"
-    git clone https://aur.archlinux.org/yay.git /tmp/yay
-    pushd /tmp/yay > /dev/null
-    makepkg -si --noconfirm
-    popd > /dev/null
-    rm -rf /tmp/yay
-    echo -e "${GREEN}🧹 Временная папка /tmp/yay удалена${RESET}"
-else
-    echo -e "${GREEN}✅ yay уже установлен${RESET}"
-fi
+# ─────────────────────────────────────────────
+# 🔧 AUR packages (requires yay)
+# Use ensure_aur_helper() to handle broken yay (libalpm mismatch, etc.)
+ensure_aur_helper
 
 aur_pkgs=(
     xkb-switch
@@ -517,6 +663,8 @@ else
             if [[ -z "$REPLY" || "$REPLY" =~ ^[Yy] ]]; then
                 echo -e "${CYAN}🔄 Running full system update...${RESET}"
                 sudo pacman -Syu --noconfirm
+                mark_synced
+                mark_upgraded
                 # Now try installing swh-plugins again
                 echo -e "${CYAN}🎙 Retrying swh-plugins installation...${RESET}"
                 if sudo pacman -S --noconfirm swh-plugins; then
