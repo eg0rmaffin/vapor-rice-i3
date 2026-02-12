@@ -154,6 +154,9 @@ deps=(
     	pamixer
     	pavucontrol
     	sof-firmware
+	# Microphone processing (Clean Mic filter-chain)
+	noise-suppression-for-voice  # RNNoise LADSPA plugin for noise suppression
+	swh-plugins                  # LADSPA limiter (fast_lookahead_limiter)
 	#utils
 	cbatticon #battery status icon in system tray
 	p7zip
