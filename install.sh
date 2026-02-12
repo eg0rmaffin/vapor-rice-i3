@@ -48,9 +48,24 @@ mark_upgraded() {
 }
 
 # ─────────────────────────────────────────────
-# 🔐 Keyring: ensure pacman keyring is initialized and valid
-# Fixes: marginal trust issues, broken keyring state
-ensure_keyring() {
+# 🔐 Keyring: OFFLINE-FIRST keyring repair
+# This function is ONLY called as a fallback when PGP signature errors occur.
+# It does NOT contact keyservers, does NOT use --refresh-keys.
+# Fully offline repair using installed archlinux-keyring package.
+repair_keyring_offline() {
+    echo -e "${YELLOW}🔐 Repairing keyring (offline mode)...${RESET}"
+
+    # Remove broken keyring and reinitialize from installed archlinux-keyring
+    sudo rm -rf /etc/pacman.d/gnupg
+    sudo pacman-key --init
+    sudo pacman-key --populate archlinux
+
+    echo -e "${GREEN}✅ Keyring repaired (offline)${RESET}"
+}
+
+# Legacy function for --upgrade flag (explicit user request)
+# Only called when user explicitly requests full upgrade
+ensure_keyring_for_upgrade() {
     echo -e "${CYAN}🔐 Checking pacman keyring...${RESET}"
 
     # Check if keyring directory exists
@@ -62,58 +77,36 @@ ensure_keyring() {
         return 0
     fi
 
-    # Check for marginal trust issues by looking at trustdb
-    # If we detect issues, rebuild the trustdb
-    local trust_check
-    trust_check=$(sudo pacman-key --list-keys 2>&1 || true)
-    if echo "$trust_check" | grep -q "marginal" || echo "$trust_check" | grep -q "unknown"; then
-        echo -e "${YELLOW}⚠️  Detected trust issues in keyring, refreshing...${RESET}"
-        sudo pacman-key --refresh-keys 2>/dev/null || true
-        sudo pacman-key --populate archlinux
-        echo -e "${GREEN}✅ Keyring refreshed${RESET}"
-    else
-        echo -e "${GREEN}✅ Keyring OK${RESET}"
-    fi
+    echo -e "${GREEN}✅ Keyring OK${RESET}"
 }
 
 # ─────────────────────────────────────────────
-# 🔄 System Consistency: Arch-safe upgrade boundary
-# CRITICAL: Never refresh DB without full upgrade
-# This is THE core function that prevents partial upgrades
-ensure_system_consistency() {
-    local need_upgrade=0
+# 🔄 System Upgrade: FALLBACK-ONLY full system upgrade
+# IMPORTANT: This is NOT called during normal runs.
+# It is ONLY triggered as a fallback when:
+#   1. --upgrade flag is explicitly passed
+#   2. Dependency conflict detected during package installation
+# This makes -Syu a recovery boundary, not a periodic action.
+perform_system_upgrade() {
+    echo -e "${CYAN}🔄 Running full system upgrade (pacman -Syu)...${RESET}"
 
-    # Force upgrade if explicitly requested
+    # Ensure keyring is valid before upgrade
+    ensure_keyring_for_upgrade
+
+    sudo pacman -Syu --noconfirm
+    mark_synced
+    mark_upgraded
+    echo -e "${GREEN}✅ System upgraded and synced${RESET}"
+}
+
+# Check if explicit upgrade was requested via --upgrade flag
+check_explicit_upgrade() {
     if [[ "$FORCE_UPGRADE" -eq 1 ]]; then
         echo -e "${CYAN}🔄 Full system upgrade requested (--upgrade flag)${RESET}"
-        need_upgrade=1
+        perform_system_upgrade
+        return 0
     fi
-
-    # If we need sync and not explicitly skipping upgrade, we must upgrade
-    if needs_sync && [[ "$NO_UPGRADE" -eq 0 ]] && [[ "$need_upgrade" -eq 0 ]]; then
-        echo -e "${CYAN}🔄 Database refresh needed — performing full system upgrade (Arch policy)${RESET}"
-        need_upgrade=1
-    fi
-
-    if [[ "$need_upgrade" -eq 1 ]]; then
-        # Ensure keyring is valid before upgrade
-        ensure_keyring
-
-        echo -e "${CYAN}🔄 Running full system upgrade (pacman -Syu)...${RESET}"
-        sudo pacman -Syu --noconfirm
-        mark_synced
-        mark_upgraded
-        echo -e "${GREEN}✅ System upgraded and synced${RESET}"
-    elif [[ "$NO_UPGRADE" -eq 1 ]] && needs_sync; then
-        echo -e "${YELLOW}⚠️  Sync needed but --no-upgrade specified${RESET}"
-        echo -e "${YELLOW}⚠️  WARNING: This may cause partial upgrade issues!${RESET}"
-        echo -e "${YELLOW}⚠️  Use at your own risk.${RESET}"
-        # Still sync DB but warn about partial upgrade risk
-        sudo pacman -Sy --noconfirm
-        mark_synced
-    else
-        echo -e "${GREEN}⏩ System already consistent (last sync <${SYNC_COOLDOWN}s ago)${RESET}"
-    fi
+    return 1
 }
 
 # ─────────────────────────────────────────────
@@ -173,6 +166,8 @@ _rebuild_yay() {
 # ─────────────────────────────────────────────
 # 🧩 helper: установка списков пакетов (declarative, idempotent)
 # Uses --needed flag for efficient batch installation
+# OFFLINE-FIRST: No -Syu unless actual errors occur
+# Handles dependency conflicts and PGP errors with fallback recovery
 install_list() {
     local -a pkgs=("$@")
     local -a missing=()
@@ -190,9 +185,60 @@ install_list() {
     fi
 
     echo -e "${YELLOW}📦 Installing ${#missing[@]} packages: ${missing[*]::5}...${RESET}"
-    # Use --needed for idempotency (won't reinstall if already installed)
-    sudo pacman -S --needed --noconfirm "${pkgs[@]}"
-    echo -e "${GREEN}✅ Packages installed${RESET}"
+
+    # Capture installation attempt output to detect specific errors
+    local install_output install_status
+    install_output=$(sudo pacman -S --needed --noconfirm "${pkgs[@]}" 2>&1)
+    install_status=$?
+
+    if [ $install_status -eq 0 ]; then
+        echo -e "${GREEN}✅ Packages installed${RESET}"
+        return 0
+    fi
+
+    # ─── Error Handling: Fallback Recovery ───
+
+    # Check for PGP signature errors → offline keyring repair
+    if echo "$install_output" | grep -qi "invalid or corrupted package (PGP signature)"; then
+        echo -e "${YELLOW}⚠️  PGP signature error detected${RESET}"
+        echo -e "${CYAN}🔐 Attempting offline keyring repair...${RESET}"
+
+        repair_keyring_offline
+
+        echo -e "${CYAN}📦 Retrying package installation...${RESET}"
+        if sudo pacman -S --needed --noconfirm "${pkgs[@]}"; then
+            echo -e "${GREEN}✅ Packages installed after keyring repair${RESET}"
+            return 0
+        else
+            echo -e "${RED}❌ Package installation still failed after keyring repair${RESET}"
+            return 1
+        fi
+    fi
+
+    # Check for dependency conflict errors → fallback to -Syu
+    if echo "$install_output" | grep -qE "could not satisfy dependencies|breaks dependency"; then
+        echo -e "${YELLOW}⚠️  Dependency conflict detected:${RESET}"
+        echo "$install_output" | grep -E "(could not satisfy|breaks dependency)" | head -5
+        echo ""
+        echo -e "${CYAN}🔄 Performing single fallback system upgrade to resolve...${RESET}"
+
+        perform_system_upgrade
+
+        echo -e "${CYAN}📦 Retrying package installation...${RESET}"
+        if sudo pacman -S --needed --noconfirm "${pkgs[@]}"; then
+            echo -e "${GREEN}✅ Packages installed after system upgrade${RESET}"
+            return 0
+        else
+            echo -e "${RED}❌ Package installation still failed after system upgrade${RESET}"
+            echo -e "${RED}Please check the error above and resolve manually.${RESET}"
+            return 1
+        fi
+    fi
+
+    # Unknown error - print output and fail
+    echo -e "${RED}❌ Package installation failed:${RESET}"
+    echo "$install_output"
+    return 1
 }
 
 # ─────────────────────────────────────────────
@@ -217,16 +263,14 @@ fi
 
 # ─────────────────────────────────────────────
 # ─────────────────────────────────────────────
-# 🌐 Mirror management and system consistency
+# 🌐 Mirror management (offline-first design)
 #
-# ARCH SAFETY RULE: Never refresh pacman DB without full upgrade!
-# This section handles mirrors separately from DB sync.
+# OFFLINE-FIRST RULE: No implicit system upgrades!
+# This section ONLY touches /etc/pacman.d/mirrorlist.
+# System upgrades are FALLBACK-ONLY (triggered by actual errors during install).
 
-# Force sync/upgrade when multilib was just enabled (new repos need db download)
-if [[ "$MULTILIB_CHANGED" -eq 1 ]]; then
-    FORCE_SYNC=1
-    FORCE_UPGRADE=1  # multilib change requires full upgrade
-fi
+# Note: multilib enabling no longer forces upgrade. The install_list function
+# will handle any dependency conflicts via fallback recovery if needed.
 
 # ─────────────────────────────────────────────
 # 🪞 Mirror configuration (separate from pacman sync)
@@ -294,9 +338,10 @@ else
 fi
 
 # ─────────────────────────────────────────────
-# 🔄 CRITICAL: Arch-safe system consistency check
-# This is THE place where pacman DB is synced (always with full upgrade)
-ensure_system_consistency
+# 🔄 OFFLINE-FIRST: Only perform explicit upgrade if --upgrade flag was passed
+# Normal runs (99% of cases) skip system upgrade entirely for fast, deterministic execution.
+# System upgrades are FALLBACK-ONLY: triggered by dependency conflicts or PGP errors during install.
+check_explicit_upgrade || true
 
 # ─────────────────────────────────────────────
 # 📦 Зависимости pacman
@@ -637,55 +682,11 @@ done
 
 # ─── 🎙 Microphone enhancement: install swh-plugins for limiter ───
 # swh-plugins provides the fast_lookahead_limiter LADSPA plugin.
-# If installation fails due to dependency conflicts, prompt user to update system.
-if pacman -Q swh-plugins &>/dev/null; then
-    echo -e "${GREEN}✅ swh-plugins already installed${RESET}"
-else
-    echo -e "${CYAN}🎙 Installing swh-plugins (LADSPA limiter for Clean Mic)...${RESET}"
-
-    # Capture installation attempt output to detect dependency conflicts
-    INSTALL_OUTPUT=$(sudo pacman -S --noconfirm swh-plugins 2>&1)
-    INSTALL_STATUS=$?
-
-    if [ $INSTALL_STATUS -eq 0 ]; then
-        echo -e "${GREEN}✅ swh-plugins installed successfully${RESET}"
-    else
-        # Check if it's a dependency conflict error
-        if echo "$INSTALL_OUTPUT" | grep -q "could not satisfy dependencies"; then
-            echo -e "${YELLOW}⚠️  Dependency conflict detected:${RESET}"
-            echo "$INSTALL_OUTPUT" | grep -E "(could not satisfy|breaks dependency)" | head -5
-            echo ""
-            echo -e "${CYAN}This usually happens when some packages are out of sync.${RESET}"
-            echo -e "${CYAN}A full system update will resolve this.${RESET}"
-            echo ""
-            echo -e -n "${YELLOW}Do you want to run 'sudo pacman -Syu' to update the system? [Y/n]: ${RESET}"
-            read -r REPLY
-            if [[ -z "$REPLY" || "$REPLY" =~ ^[Yy] ]]; then
-                echo -e "${CYAN}🔄 Running full system update...${RESET}"
-                sudo pacman -Syu --noconfirm
-                mark_synced
-                mark_upgraded
-                # Now try installing swh-plugins again
-                echo -e "${CYAN}🎙 Retrying swh-plugins installation...${RESET}"
-                if sudo pacman -S --noconfirm swh-plugins; then
-                    echo -e "${GREEN}✅ swh-plugins installed successfully after system update${RESET}"
-                else
-                    echo -e "${RED}❌ swh-plugins still failed to install. Please check the error above.${RESET}"
-                    echo -e "${RED}❌ Clean Mic feature will not work without swh-plugins.${RESET}"
-                    exit 1
-                fi
-            else
-                echo -e "${RED}❌ swh-plugins is required for Clean Mic feature.${RESET}"
-                echo -e "${RED}❌ Please run 'sudo pacman -Syu swh-plugins' manually and re-run install.sh${RESET}"
-                exit 1
-            fi
-        else
-            # Some other error
-            echo -e "${RED}❌ Failed to install swh-plugins:${RESET}"
-            echo "$INSTALL_OUTPUT"
-            exit 1
-        fi
-    fi
+# Uses install_list for consistent offline-first error handling with automatic fallback.
+echo -e "${CYAN}🎙 Installing swh-plugins (LADSPA limiter for Clean Mic)...${RESET}"
+if ! install_list swh-plugins; then
+    echo -e "${RED}❌ swh-plugins failed to install. Clean Mic feature will not work.${RESET}"
+    exit 1
 fi
 echo -e "${GREEN}✅ Clean Mic dependencies ready (RNNoise + Limiter)${RESET}"
 
