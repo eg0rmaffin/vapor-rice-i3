@@ -13,7 +13,8 @@ ExecStart=%h/dotfiles/bin/kbd-backlight-watcher.sh run
 # Restart on failure
 Restart=on-failure
 RestartSec=3
-# Environment is inherited from user session (includes DBUS_SESSION_BUS_ADDRESS, DISPLAY)
+# Environment: DBUS_SESSION_BUS_ADDRESS is inherited from systemd user session.
+# DISPLAY is imported by .xinitrc after X starts.
 
 [Install]
 WantedBy=graphical-session.target

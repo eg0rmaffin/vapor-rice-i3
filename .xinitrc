@@ -15,12 +15,15 @@ export XDG_CURRENT_DESKTOP=i3
 export XDG_SESSION_DESKTOP=i3
 
 export PATH="$HOME/.local/bin:$PATH"
-eval "$(dbus-launch --sh-syntax --exit-with-session)"
 
-# Import D-Bus and display environment into systemd user session
-# This is required for systemd user services to access the session bus
-# (e.g., kbd-backlight-watcher.service needs DBUS_SESSION_BUS_ADDRESS for dunst notifications)
-systemctl --user import-environment DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_CURRENT_DESKTOP
+# ─── Session D-Bus ───
+# The systemd user session (started by pam_systemd on TTY login) provides
+# the authoritative D-Bus session bus at $XDG_RUNTIME_DIR/bus.
+# We do NOT spawn a second bus with dbus-launch — that causes environment
+# desync and breaks PipeWire/WirePlumber/dunst/systemd user services.
+# Instead, we only import DISPLAY and XDG desktop context so that systemd
+# user services (e.g., kbd-backlight-watcher.service) can access the X display.
+systemctl --user import-environment DISPLAY XDG_CURRENT_DESKTOP
 
 # 🎹 Клавиатура
 setxkbmap -layout us,ru -option grp:alt_shift_toggle
