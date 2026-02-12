@@ -6,17 +6,27 @@
 #
 #    Policy goals (Windows-like):
 #      - One persistent virtual output sink (always exists)
-#      - Applications connect to virtual sink, never to physical devices
-#      - Physical devices attach/detach underneath via loopback
+#      - One persistent virtual input source "Clean Mic" (noise-suppressed)
+#      - Applications connect to virtual devices, never to physical hardware
+#      - Physical devices attach/detach underneath via loopback/filter-chain
 #      - Bluetooth: A2DP only, no HSP/HFP profile switching
 #      - Microphone does NOT degrade output quality
 #      - No auto-mute/cork on device hot-plug
-#      - Device hot-plug = redirect loopback automatically
+#      - Device hot-plug = redirect automatically
 #
-#    Architecture:
+#    Output architecture:
 #      App streams → [Virtual Output sink] → loopback → [physical device]
 #      When BT connects:  loopback moves to BT   (apps unaffected)
 #      When BT disconnects: loopback moves back   (apps unaffected)
+#
+#    Input architecture (Clean Mic):
+#      [Hardware Mic] → RNNoise → Limiter → [Clean Mic source]
+#                                                  ↑
+#                                          Apps connect here
+#      - Noise suppression via RNNoise (removes background noise)
+#      - Limiter prevents clipping (loud sounds capped at -3dB)
+#      - Hardware-agnostic: works with any mic (built-in, USB, Bluetooth)
+#      - Hotplug-safe: filter-chain follows default source automatically
 #
 #    IMPORTANT: This script NEVER restarts PipeWire.
 #      Restarting PipeWire kills the PulseAudio socket, which permanently
@@ -31,7 +41,8 @@
 #      This avoids double-attenuation (virtual × physical) that makes
 #      speakers sound too quiet even at 100% virtual sink volume.
 #
-#    Dependencies: wireplumber, pipewire, pipewire-pulse
+#    Dependencies: wireplumber, pipewire, pipewire-pulse,
+#                  noise-suppression-for-voice, swh-plugins
 # ─────────────────────────────────────────────
 
 setup_audio_policy() {
@@ -96,6 +107,18 @@ setup_audio_policy() {
         else
             echo -e "  ${YELLOW}⚠️ Virtual Output sink not loaded yet (PipeWire configs take effect on next login)${RESET}"
         fi
+
+        # ─── Check if Clean Mic source is already available ───
+        # The clean-mic filter-chain is loaded by PipeWire from 60-clean-mic.conf.
+        # On first install this won't exist yet — it will appear on next login.
+        local clean_mic_id
+        clean_mic_id=$(wpctl status 2>/dev/null | grep -i "clean_mic" | grep -v "capture" | grep -o '[0-9]*' | head -1)
+        if [ -n "$clean_mic_id" ]; then
+            wpctl set-default "$clean_mic_id" 2>/dev/null || true
+            echo -e "  ${GREEN}✅ Clean Mic set as default source (id=$clean_mic_id)${RESET}"
+        else
+            echo -e "  ${YELLOW}⚠️ Clean Mic source not loaded yet (PipeWire configs take effect on next login)${RESET}"
+        fi
     fi
 
     # ─── Set physical ALSA sinks to 100% volume ───
@@ -116,5 +139,5 @@ setup_audio_policy() {
     fi
 
     echo -e "${GREEN}✅ Deterministic audio policy deployed${RESET}"
-    echo -e "  ${CYAN}ℹ️  PipeWire configs (virtual sink) will take effect on next login${RESET}"
+    echo -e "  ${CYAN}ℹ️  PipeWire configs (virtual sink, clean mic) take effect on next login${RESET}"
 }

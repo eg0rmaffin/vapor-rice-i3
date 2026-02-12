@@ -1,16 +1,19 @@
 #!/bin/bash
 # ─────────────────────────────────────────────
-# Ensure Virtual Output is the default audio sink and physical devices
-# are at full volume.
+# Ensure Virtual Output is the default audio sink, Clean Mic is the
+# default audio source, and physical devices are at full volume.
 #
 # Called from i3 autostart (exec_always) on every login and i3 reload.
-# Waits for WirePlumber to discover the virtual sink node, then:
-#   1. Sets virtual sink as default output
-#   2. Sets all physical ALSA output sinks to 100% volume
+# Waits for WirePlumber to discover the virtual nodes, then:
+#   1. Sets Virtual Output as default sink (output)
+#   2. Sets Clean Mic as default source (input)
+#   3. Sets all physical ALSA output sinks to 100% volume
 #
-# With the virtual sink architecture, the physical device should always
-# be at max volume — the user controls volume through the virtual sink
-# (one volume knob, Windows-like behavior).
+# With the virtual device architecture:
+#   - Physical output devices are at max volume — the user controls
+#     volume through the virtual sink (one volume knob, Windows-like)
+#   - Applications receive noise-suppressed audio from Clean Mic,
+#     never from raw hardware microphones
 #
 # Safe to run repeatedly — idempotent.
 #
@@ -30,6 +33,14 @@ virtual_id=$(wpctl status 2>/dev/null | grep -i "virtual_output_sink" | grep -o 
 
 if [ -n "$virtual_id" ]; then
     wpctl set-default "$virtual_id" 2>/dev/null || true
+fi
+
+# Find clean_mic node ID in wpctl status output (the playback side, not capture)
+# The clean_mic is an Audio/Source that applications should use for input
+clean_mic_id=$(wpctl status 2>/dev/null | grep -i "clean_mic" | grep -v "capture" | grep -o '[0-9]*' | head -1)
+
+if [ -n "$clean_mic_id" ]; then
+    wpctl set-default "$clean_mic_id" 2>/dev/null || true
 fi
 
 # ─── Set all physical ALSA output sinks to 100% volume ───
