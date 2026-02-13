@@ -187,15 +187,34 @@ if [ -f /usr/lib/ladspa/librnnoise_ladspa.so ] || [ -f /usr/lib64/ladspa/librnno
 fi
 check "RNNoise plugin installed" "$rnnoise_ok"
 
-# NOTE: Limiter (swh-plugins) check removed.
-# The fast_lookahead_limiter uses port names that vary between PipeWire versions,
-# causing filter-chain failures on PipeWire 1.4.x. Clean Mic now uses RNNoise only.
+# Check Clean Mic systemd service (NEW: systemd-based approach)
+# This is more reliable than context.modules drop-ins which can silently fail
+if systemctl --user cat pipewire-clean-mic.service &>/dev/null; then
+    check "Clean Mic service installed" "true"
 
-# Check if Clean Mic filter-chain is running
+    # Check if service is running
+    if systemctl --user is-active pipewire-clean-mic.service &>/dev/null; then
+        check "Clean Mic service running" "true"
+    else
+        service_status=$(systemctl --user is-active pipewire-clean-mic.service 2>/dev/null || true)
+        if [ "$service_status" = "failed" ]; then
+            check "Clean Mic service running" "false"
+            echo -e "  ${YELLOW}  Service failed! Check: journalctl --user -u pipewire-clean-mic.service${RESET}"
+        else
+            check "Clean Mic service running" "false"
+            echo -e "  ${YELLOW}  Hint: systemctl --user start pipewire-clean-mic.service${RESET}"
+        fi
+    fi
+else
+    check "Clean Mic service installed" "false"
+    echo -e "  ${YELLOW}  Run install.sh to set up the Clean Mic service${RESET}"
+fi
+
+# Check if Clean Mic node exists in PipeWire
 if command -v wpctl &>/dev/null; then
     clean_mic_found=$(wpctl status 2>/dev/null | grep -c "clean_mic" || true)
     if [ "$clean_mic_found" -gt 0 ]; then
-        check "Clean Mic filter-chain running" "true"
+        check "Clean Mic node in PipeWire" "true"
 
         # Check if Clean Mic is the default source
         clean_mic_id=$(wpctl status 2>/dev/null | grep -i "clean_mic" | grep -v "capture" | grep -o '[0-9]*' | head -1)
@@ -204,12 +223,12 @@ if command -v wpctl &>/dev/null; then
             check "Clean Mic is default source" "true"
         else
             check "Clean Mic is default source" "false"
-            echo -e "  ${YELLOW}  Hint: run 'wpctl set-default <id>' where <id> is the Clean Mic node ID${RESET}"
+            echo -e "  ${YELLOW}  Hint: run 'wpctl set-default $clean_mic_id'${RESET}"
         fi
     else
         if [ "$rnnoise_ok" = "true" ]; then
-            echo -e "  ${YELLOW}⚠️ Clean Mic filter-chain not running (plugin present, may need restart)${RESET}"
-            echo -e "  ${YELLOW}  Hint: Log out and log back in, or run: systemctl --user restart pipewire wireplumber${RESET}"
+            echo -e "  ${YELLOW}⚠️ Clean Mic node not found (service may have failed)${RESET}"
+            echo -e "  ${YELLOW}  Check: journalctl --user -u pipewire-clean-mic.service${RESET}"
         else
             echo -e "  ${YELLOW}⚠️ Clean Mic not active (missing RNNoise plugin)${RESET}"
             echo -e "  ${YELLOW}  This is NORMAL if plugin failed to install due to dependency conflicts.${RESET}"
@@ -220,6 +239,9 @@ if command -v wpctl &>/dev/null; then
 else
     echo -e "  ${YELLOW}⚠️ wpctl not found${RESET}"
 fi
+
+# Additional hint for detailed Clean Mic diagnostics
+echo -e "  ${CYAN}ℹ️  For detailed Clean Mic diagnostics: clean-mic-status.sh${RESET}"
 
 echo ""
 
