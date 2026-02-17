@@ -865,5 +865,16 @@ done
 source ~/dotfiles/scripts/snapshot_setup.sh
 setup_snapshots
 
+# ─── 🧠 zram: Compressed RAM swap for memory pressure stability ───
+# Prevents full-system stalls under heavy workloads (JVM + browser + hybrid GPU)
+# by providing a compressed memory buffer before OOM conditions.
+source ~/dotfiles/scripts/zram_setup.sh
+setup_zram
+
+# Link zram diagnostic script
+echo -e "${CYAN}🔧 Linking zram-status.sh...${RESET}"
+ln -sf ~/dotfiles/bin/zram-status.sh ~/.local/bin/zram-status.sh
+echo -e "${GREEN}✅ zram-status.sh linked${RESET}"
+
 # 🎉 Финал
 echo -e "${GREEN}✅ All done! You can launch i3 with \`startx\` from tty 🎉${RESET}"
