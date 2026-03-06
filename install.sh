@@ -495,6 +495,10 @@ deps=(
 	network-manager-applet
 	obsidian
 	light #определяет яркость
+    #java
+    jdk8-openjdk
+    jdk17-openjdk
+    jdk21-openjdk
 	# Звуковая система
     	pipewire
     	pipewire-pulse
