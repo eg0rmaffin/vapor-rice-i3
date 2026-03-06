@@ -186,10 +186,25 @@ install_list() {
 
     echo -e "${YELLOW}📦 Installing ${#missing[@]} packages: ${missing[*]::5}...${RESET}"
 
-    # Capture installation attempt output to detect specific errors
+    # ─── Explicit Capture Boundary ───────────────────────────────────
+    # IMPORTANT: Disable errexit locally to guarantee we always capture
+    # both stdout/stderr AND the exit code before any error handling.
+    #
+    # Under global set -e, command substitution with a failing command
+    # may exit the script immediately (shell-dependent behavior), which
+    # would prevent:
+    #   1. Capturing the exit status
+    #   2. Printing diagnostic output
+    #   3. Running fallback recovery (keyring repair, system upgrade)
+    #
+    # This pattern preserves global fail-fast semantics while making
+    # install_list() an explicit error-capture boundary.
+    # ─────────────────────────────────────────────────────────────────
     local install_output install_status
+    set +e
     install_output=$(sudo pacman -S --needed --noconfirm "${pkgs[@]}" 2>&1)
     install_status=$?
+    set -e
 
     if [ $install_status -eq 0 ]; then
         echo -e "${GREEN}✅ Packages installed${RESET}"
@@ -197,6 +212,11 @@ install_list() {
     fi
 
     # ─── Error Handling: Fallback Recovery ───
+    # Always print the error output first so the user sees what happened
+    echo -e "${RED}❌ Package installation failed (exit code $install_status)${RESET}"
+    echo -e "${YELLOW}─── pacman output ───${RESET}"
+    echo "$install_output"
+    echo -e "${YELLOW}─────────────────────${RESET}"
 
     # Check for PGP signature errors → offline keyring repair
     if echo "$install_output" | grep -qi "invalid or corrupted package (PGP signature)"; then
@@ -235,9 +255,9 @@ install_list() {
         fi
     fi
 
-    # Unknown error - print output and fail
-    echo -e "${RED}❌ Package installation failed:${RESET}"
-    echo "$install_output"
+    # Unknown error - output already printed above, just fail explicitly
+    echo -e "${RED}❌ Unknown error - no automatic recovery available${RESET}"
+    echo -e "${RED}Please check the pacman output above and resolve manually.${RESET}"
     return 1
 }
 
