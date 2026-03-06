@@ -10,6 +10,12 @@ RED="\033[0;31m"
 RESET="\033[0m"
 
 # ─────────────────────────────────────────────
+# 📋 In-memory tracking for reproducibility drift
+# Packages that are repo-missing but locally-installed
+# (will be reported at end of run)
+declare -a REPO_MISSING_LOCAL_INSTALLED=()
+
+# ─────────────────────────────────────────────
 # ⏱ Sync cache: skip pacman sync if already done recently
 # Override: pass --force-sync or set FORCE_SYNC=1
 # NEW: --upgrade flag to force full system upgrade
@@ -251,6 +257,93 @@ install_list() {
         else
             echo -e "${RED}❌ Package installation still failed after system upgrade${RESET}"
             echo -e "${RED}Please check the error above and resolve manually.${RESET}"
+            return 1
+        fi
+    fi
+
+    # ─── Check for "target not found" errors (repo-missing packages) ───
+    # This handles a specific case where:
+    #   - A package was valid when the installer was written
+    #   - The package is no longer in current repositories
+    #   - But the package may still be installed locally
+    #
+    # If ALL missing packages are already installed locally → non-fatal warning
+    # If ANY missing package is also not installed locally → fatal error
+    if echo "$install_output" | grep -q "error: target not found:"; then
+        local -a target_not_found=()
+        local -a truly_missing=()
+        local -a locally_installed=()
+
+        # Extract package names from "error: target not found: <pkg>" lines
+        while IFS= read -r line; do
+            local pkg_name
+            pkg_name=$(echo "$line" | sed -n 's/.*error: target not found: \([^ ]*\).*/\1/p')
+            if [ -n "$pkg_name" ]; then
+                target_not_found+=("$pkg_name")
+            fi
+        done < <(echo "$install_output" | grep "error: target not found:")
+
+        # Check each package: is it installed locally?
+        for pkg in "${target_not_found[@]}"; do
+            if pacman -Q "$pkg" &>/dev/null; then
+                locally_installed+=("$pkg")
+                echo -e "${YELLOW}⚠️  $pkg: not in repos, but installed locally (v$(pacman -Q "$pkg" | awk '{print $2}'))${RESET}"
+            else
+                truly_missing+=("$pkg")
+            fi
+        done
+
+        # If ALL repo-missing packages are installed locally → non-fatal
+        if [ ${#truly_missing[@]} -eq 0 ] && [ ${#locally_installed[@]} -gt 0 ]; then
+            echo -e "${YELLOW}───────────────────────────────────────────${RESET}"
+            echo -e "${YELLOW}⚠️  ${#locally_installed[@]} package(s) not in current repos but installed locally${RESET}"
+            echo -e "${YELLOW}   Current machine is OK. Fresh install may need package list update.${RESET}"
+            echo -e "${YELLOW}───────────────────────────────────────────${RESET}"
+
+            # Record for end-of-run summary
+            for pkg in "${locally_installed[@]}"; do
+                REPO_MISSING_LOCAL_INSTALLED+=("$pkg")
+            done
+
+            # Now retry installation WITHOUT the repo-missing packages
+            local -a remaining_pkgs=()
+            for pkg in "${pkgs[@]}"; do
+                local is_repo_missing=0
+                for missing in "${locally_installed[@]}"; do
+                    if [ "$pkg" == "$missing" ]; then
+                        is_repo_missing=1
+                        break
+                    fi
+                done
+                if [ "$is_repo_missing" -eq 0 ]; then
+                    remaining_pkgs+=("$pkg")
+                fi
+            done
+
+            if [ ${#remaining_pkgs[@]} -gt 0 ]; then
+                echo -e "${CYAN}📦 Retrying installation of ${#remaining_pkgs[@]} remaining packages...${RESET}"
+                if sudo pacman -S --needed --noconfirm "${remaining_pkgs[@]}"; then
+                    echo -e "${GREEN}✅ Remaining packages installed${RESET}"
+                    return 0
+                else
+                    echo -e "${RED}❌ Failed to install remaining packages${RESET}"
+                    return 1
+                fi
+            else
+                echo -e "${GREEN}✅ All requested packages already satisfied (locally installed)${RESET}"
+                return 0
+            fi
+        fi
+
+        # If ANY package is truly missing (not in repos AND not installed) → fatal
+        if [ ${#truly_missing[@]} -gt 0 ]; then
+            echo -e "${RED}───────────────────────────────────────────${RESET}"
+            echo -e "${RED}❌ ${#truly_missing[@]} package(s) not found and not installed locally:${RESET}"
+            for pkg in "${truly_missing[@]}"; do
+                echo -e "${RED}   - $pkg${RESET}"
+            done
+            echo -e "${RED}───────────────────────────────────────────${RESET}"
+            echo -e "${RED}These packages cannot be installed. Update the package list or find replacements.${RESET}"
             return 1
         fi
     fi
@@ -895,6 +988,33 @@ setup_zram
 echo -e "${CYAN}🔧 Linking zram-status.sh...${RESET}"
 ln -sf ~/dotfiles/bin/zram-status.sh ~/.local/bin/zram-status.sh
 echo -e "${GREEN}✅ zram-status.sh linked${RESET}"
+
+# ─────────────────────────────────────────────
+# 📋 Reproducibility Summary
+# Report any packages that were repo-missing but locally installed
+if [ ${#REPO_MISSING_LOCAL_INSTALLED[@]} -gt 0 ]; then
+    echo ""
+    echo -e "${YELLOW}┌─────────────────────────────────────────────────────────────┐${RESET}"
+    echo -e "${YELLOW}│           ⚠️  REPRODUCIBILITY DRIFT DETECTED                │${RESET}"
+    echo -e "${YELLOW}└─────────────────────────────────────────────────────────────┘${RESET}"
+    echo ""
+    echo -e "${YELLOW}The following ${#REPO_MISSING_LOCAL_INSTALLED[@]} package(s) are no longer in current repositories:${RESET}"
+    echo ""
+    for pkg in "${REPO_MISSING_LOCAL_INSTALLED[@]}"; do
+        local_version=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $2}')
+        echo -e "${YELLOW}  • $pkg (installed: $local_version)${RESET}"
+    done
+    echo ""
+    echo -e "${CYAN}What this means:${RESET}"
+    echo -e "  ✅ This machine is fine - packages are installed and working"
+    echo -e "  ⚠️  A fresh install may fail on these packages"
+    echo -e "  📝 Consider updating the package list or finding replacements"
+    echo ""
+    echo -e "${CYAN}To check package status:${RESET}"
+    echo -e "  pacman -Q <package>      # verify local installation"
+    echo -e "  pacman -Si <package>     # check repo availability"
+    echo ""
+fi
 
 # 🎉 Финал
 echo -e "${GREEN}✅ All done! You can launch i3 with \`startx\` from tty 🎉${RESET}"
