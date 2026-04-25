@@ -562,6 +562,7 @@ aur_pkgs=(
     shadowsocks-rust #sslocal для аутлайн протокола впн
     woeusb-ng #типо rufus для прошивки флешек (только iso винды)
     hiddify-next-bin #современный клиент для VLESS+Reality протоколов впн
+    happ #тоже vless reality клиент
 )
 
 for pkg in "${aur_pkgs[@]}"; do
