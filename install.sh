@@ -842,8 +842,13 @@ source ~/dotfiles/scripts/audio_policy.sh
 setup_audio_policy
 
 # ─── 🎨 Appearance policy (dark mode for browsers / portal / electron) ───
+# GTK4 apps respect color-scheme=prefer-dark, but GTK3 apps (e.g. blueman) do
+# not reliably interpret it and may fall back to light Adwaita. Setting
+# gtk-theme to Adwaita-dark removes that ambiguity for GTK3 while keeping
+# prefer-dark for portals / browsers / electron.
 if command -v gsettings >/dev/null && [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+  gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
 else
   echo -e "${YELLOW}⚠️ Skipping gsettings (no DBus session)${RESET}"
 fi
