@@ -491,6 +491,7 @@ deps=(
 	fd
 	htop
 	unzip
+    mpv #video player
 	zip
 	network-manager-applet
 	obsidian
