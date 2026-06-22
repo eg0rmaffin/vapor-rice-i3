@@ -20,6 +20,8 @@ declare -a REPO_MISSING_LOCAL_INSTALLED=()
 # Override: pass --force-sync or set FORCE_SYNC=1
 # NEW: --upgrade flag to force full system upgrade
 # NEW: --no-upgrade flag to skip upgrade even when sync is needed
+# NEW: --repair-keyring flag — emergency: repair pacman keyring state and EXIT
+#      (does NOT continue into the dotfiles install flow). See check_explicit_keyring_repair.
 SYNC_COOLDOWN=3600  # seconds (1 hour)
 SYNC_STAMP="$HOME/.cache/vapor-rice/last-sync"
 UPGRADE_STAMP="$HOME/.cache/vapor-rice/last-upgrade"
@@ -27,10 +29,12 @@ UPGRADE_STAMP="$HOME/.cache/vapor-rice/last-upgrade"
 FORCE_SYNC=0
 FORCE_UPGRADE=0
 NO_UPGRADE=0
+REPAIR_KEYRING=0
 for arg in "$@"; do
     [[ "$arg" == "--force-sync" ]] && FORCE_SYNC=1
     [[ "$arg" == "--upgrade" ]] && FORCE_UPGRADE=1
     [[ "$arg" == "--no-upgrade" ]] && NO_UPGRADE=1
+    [[ "$arg" == "--repair-keyring" ]] && REPAIR_KEYRING=1
 done
 
 needs_sync() {
@@ -67,6 +71,65 @@ repair_keyring_offline() {
     sudo pacman-key --populate archlinux
 
     echo -e "${GREEN}✅ Keyring repaired (offline)${RESET}"
+}
+
+# ─────────────────────────────────────────────
+# 🔐 Explicit keyring repair (emergency manual command — triggered by --repair-keyring)
+# Deterministic, OFFLINE-FIRST recovery for the classic Arch "keyring / trustdb is
+# stale or broken" failures that block any upgrade:
+#   - invalid or corrupted package (PGP signature)
+#   - signature is marginal trust
+#   - unknown trust
+#   - keyring not initialized
+# It does NOT use --refresh-keys (slow/flaky) and does NOT touch SigLevel or disable
+# signature verification — package signature checking stays fully intact.
+perform_keyring_repair() {
+    echo -e "${CYAN}🔐 Explicit pacman keyring repair requested...${RESET}"
+
+    # ─── Safety: never repair under a live package transaction ───
+    # Reinitializing the keyring while pacman/yay/makepkg is mid-transaction can
+    # corrupt state. If a real process is running, refuse and bail out — we
+    # deliberately do NOT blindly delete the pacman db lock.
+    local proc running=""
+    for proc in pacman yay makepkg; do
+        if pgrep -x "$proc" >/dev/null 2>&1; then
+            running="$proc"
+            break
+        fi
+    done
+    if [ -n "$running" ]; then
+        echo -e "${RED}❌ Another package manager process is running: ${running}${RESET}"
+        echo -e "${YELLOW}   Refusing to repair the keyring while a transaction may be active.${RESET}"
+        echo -e "${YELLOW}   Wait for it to finish (or close it), then retry: ./install.sh --repair-keyring${RESET}"
+        exit 1
+    fi
+
+    # Make sure system time is sane enough for signature validity windows.
+    # Best-effort: enable NTP if timedatectl is available (never fatal).
+    if command -v timedatectl >/dev/null 2>&1; then
+        sudo timedatectl set-ntp true 2>/dev/null || true
+    fi
+
+    # Full offline reset from the installed archlinux-keyring package
+    # (rm gnupg dir, pacman-key --init, pacman-key --populate archlinux).
+    repair_keyring_offline
+
+    # Refresh databases and update ONLY the archlinux-keyring package so the
+    # trustdb is rebuilt from the newest keyring. This is the single online step
+    # and is best-effort: the offline reset above is the deterministic core, so a
+    # network/mirror/lock failure here must NOT undo the repair we just did.
+    if sudo pacman -Sy --noconfirm archlinux-keyring; then
+        # Repopulate again so the trustdb reflects the just-updated keyring.
+        sudo pacman-key --populate archlinux
+        echo -e "${GREEN}✅ Pacman keyring repaired and archlinux-keyring updated${RESET}"
+    else
+        echo -e "${YELLOW}⚠️  Could not update archlinux-keyring online (network, mirror, or pacman lock).${RESET}"
+        echo -e "${YELLOW}   The offline keyring reset already completed — core trust state is restored.${RESET}"
+        echo -e "${GREEN}✅ Pacman keyring repaired (offline reset applied)${RESET}"
+    fi
+
+    echo -e "${CYAN}You can now retry:${RESET}"
+    echo -e "  yay -Syu"
 }
 
 # Legacy function for --upgrade flag (explicit user request)
@@ -113,6 +176,21 @@ check_explicit_upgrade() {
         return 0
     fi
     return 1
+}
+
+# Check if explicit keyring repair was requested via the --repair-keyring flag.
+# When set, repair the keyring and EXIT immediately. This must NOT continue into
+# the dotfiles install flow (packages, symlinks, audio, hardware, etc.) — it does
+# exactly one thing: repair Arch pacman keyring state.
+#
+# Combined-flag note: if --repair-keyring is passed together with other flags
+# (e.g. --upgrade), the keyring is repaired and the script exits regardless.
+# This explicit "repair and exit" behavior is intentional for the first version.
+check_explicit_keyring_repair() {
+    if [[ "$REPAIR_KEYRING" -eq 1 ]]; then
+        perform_keyring_repair
+        exit 0
+    fi
 }
 
 # ─────────────────────────────────────────────
@@ -353,6 +431,13 @@ install_list() {
     echo -e "${RED}Please check the pacman output above and resolve manually.${RESET}"
     return 1
 }
+
+# ─────────────────────────────────────────────
+# 🔐 Explicit keyring repair short-circuit (emergency manual command)
+# MUST run before ANY install-flow side effects (multilib, mirrors, packages,
+# symlinks, audio, hardware…). If --repair-keyring was passed, this repairs the
+# pacman keyring and exits 0 — doing exactly one thing and nothing else.
+check_explicit_keyring_repair
 
 # ─────────────────────────────────────────────
 # 🚀 Шапка
