@@ -150,3 +150,6 @@ exec_always --no-startup-id blueman-applet
 
 #Батарейка
 exec_always --no-startup-id sh -lc 'pgrep -x cbatticon >/dev/null || cbatticon'
+
+#polkit auth agent
+exec --no-startup-id /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1

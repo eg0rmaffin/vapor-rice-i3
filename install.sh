@@ -496,6 +496,10 @@ deps=(
 	network-manager-applet
 	obsidian
 	light #определяет яркость
+    ollama #работа с llm
+    docker
+    wget
+    polkit-gnome  # polkit authentication agent
     #java
     jdk8-openjdk
     jdk17-openjdk
@@ -520,6 +524,7 @@ deps=(
 	xournalpp #доска для рисования
 	thunderbird #thunderbird (no comments)
     bind #для сетевых тестов
+    openbsd-netcat #ssh через socks5
 	playerctl #управление медиаплеерами (MPRIS)
 	inotify-tools #keyboard backlight OSD watcher (inotifywait)
     mesa-utils   # OpenGL diagnostics (glxinfo, glxgears)
@@ -561,9 +566,13 @@ aur_pkgs=(
     catppuccin-gtk-theme-mocha
     chicago95-icon-theme
     shadowsocks-rust #sslocal для аутлайн протокола впн
-    woeusb-ng #типо rufus для прошивки флешек (только iso винды)
     hiddify-next-bin #современный клиент для VLESS+Reality протоколов впн
     happ #тоже vless reality клиент
+
+    #отключено потому что однажды что то сломало
+    #стоит конкретно подумать как лучше быть допустим optional или как
+    #в целом конечно аур пакеты использовать надо очень осторожно это понятно
+    #woeusb-ng #типо rufus для прошивки флешек (только iso винды)
 )
 
 for pkg in "${aur_pkgs[@]}"; do
