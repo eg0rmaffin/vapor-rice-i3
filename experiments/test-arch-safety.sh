@@ -39,15 +39,18 @@ INSTALL_SH="../install.sh"
 # Count pacman -Syu (safe, should only be in perform_system_upgrade fallback)
 SAFE_SYNC=$(grep -c "pacman -Syu" "$INSTALL_SH" 2>/dev/null || echo "0")
 
-# Count pacman -Sy (excluding -Syu, comments, and string literals)
-# This should be 0 in the new design
-BARE_SY=$(grep -E "pacman -Sy[^u]|pacman -Sy$" "$INSTALL_SH" 2>/dev/null | grep -v "^#" | grep -v "# " | grep -v "'pacman" | wc -l | tr -d ' ')
+# Count pacman -Sy (excluding -Syu, comments, and string literals).
+# EXCEPTION: `pacman -Sy archlinux-keyring` is the documented, safe keyring-recovery
+# procedure (used by the --repair-keyring flag). It updates ONLY the keyring package
+# and is the standard Arch fix for a stale/broken trustdb, so it is intentionally
+# allowed here. Every OTHER bare -Sy is a partial-upgrade footgun and must stay at 0.
+BARE_SY=$(grep -E "pacman -Sy[^u]|pacman -Sy$" "$INSTALL_SH" 2>/dev/null | grep -v "^#" | grep -v "# " | grep -v "'pacman" | grep -v "archlinux-keyring" | wc -l | tr -d ' ')
 
 # Count pacman -Syy (should be 0)
 BARE_SYY=$(grep "pacman -Syy" "$INSTALL_SH" 2>/dev/null | wc -l | tr -d ' ' || echo "0")
 
 echo "  Safe -Syu calls: $SAFE_SYNC (inside fallback functions)"
-echo "  Bare -Sy calls: $BARE_SY (expected: 0 in offline-first design)"
+echo "  Bare -Sy calls: $BARE_SY (expected: 0; archlinux-keyring recovery excepted)"
 echo "  Bare -Syy calls: $BARE_SYY (expected: 0)"
 
 if [ "$BARE_SYY" -eq 0 ]; then
@@ -192,6 +195,12 @@ if grep -q "\-\-force-sync" "$INSTALL_SH"; then
     test_pass "--force-sync flag defined"
 else
     test_fail "--force-sync flag not found"
+fi
+
+if grep -q "\-\-repair-keyring" "$INSTALL_SH"; then
+    test_pass "--repair-keyring flag defined"
+else
+    test_fail "--repair-keyring flag not found"
 fi
 
 # ─────────────────────────────────────────────
