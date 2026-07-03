@@ -801,6 +801,45 @@ mkdir -p ~/.config/rofi
 ln -sf ~/dotfiles/rofi/config.rasi ~/.config/rofi/config.rasi
 echo -e "${GREEN}✅ Rofi config linked${RESET}"
 
+# 📸 Flameshot (screenshot backend)
+# On Arch + X11/i3 Flameshot may try the Wayland screenshot portal and hang with
+# "screenshot portal retry after 30 sec". Force the legacy X11 backend so that
+# `flameshot gui` / `flameshot screen` (used by ~/dotfiles/bin/screenshot.sh) work.
+# The .ini is owned/rewritten by Flameshot at runtime, so we patch it idempotently
+# in place instead of symlinking — preserving any unrelated user settings.
+echo -e "${CYAN}📸 Ensuring Flameshot uses the X11 legacy screenshot backend...${RESET}"
+FLAMESHOT_INI="$HOME/.config/flameshot/flameshot.ini"
+mkdir -p "$(dirname "$FLAMESHOT_INI")"
+touch "$FLAMESHOT_INI"
+awk '
+    BEGIN { in_general = 0; done = 0; general_seen = 0 }
+    /^\[/ {
+        # Leaving a section: if we were in [General] but never found the key, add it.
+        if (in_general && !done) { print "useX11LegacyScreenshot=true"; done = 1 }
+        in_general = ($0 == "[General]")
+        if (in_general) general_seen = 1
+        print
+        next
+    }
+    {
+        if (in_general && $0 ~ /^useX11LegacyScreenshot[[:space:]]*=/) {
+            print "useX11LegacyScreenshot=true"
+            done = 1
+            next
+        }
+        print
+    }
+    END {
+        if (in_general && !done) { print "useX11LegacyScreenshot=true"; done = 1 }
+        if (!general_seen) {
+            if (NR > 0) print ""
+            print "[General]"
+            print "useX11LegacyScreenshot=true"
+        }
+    }
+' "$FLAMESHOT_INI" > "$FLAMESHOT_INI.tmp" && mv "$FLAMESHOT_INI.tmp" "$FLAMESHOT_INI"
+echo -e "${GREEN}✅ Flameshot X11 legacy screenshot backend enabled${RESET}"
+
 # 🟣 Discord Proxy
 echo -e "${CYAN}🔧 Linking Discord Proxy...${RESET}"
 
