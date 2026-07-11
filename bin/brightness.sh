@@ -60,8 +60,8 @@ MAX_BRIGHTNESS=$(cat "$BACKLIGHT_DIR/$BACKLIGHT_DEVICE/max_brightness")
 # Текущая яркость
 CURRENT=$(cat "$BRIGHTNESS_FILE")
 
-# Шаг изменения (5% от максимума)
-STEP=$((MAX_BRIGHTNESS / 20))
+# Шаг изменения (10% от максимума)
+STEP=$((MAX_BRIGHTNESS / 10))
 [ $STEP -lt 1 ] && STEP=1
 
 case "$1" in
@@ -84,3 +84,12 @@ case "$1" in
         exit 1
         ;;
 esac
+
+# ─── OSD + instant i3blocks update ───
+PERCENT=$((NEW * 100 / MAX_BRIGHTNESS))
+OSD_LIB="$HOME/dotfiles/scripts/osd/osd-panel.sh"
+if [ -f "$OSD_LIB" ] && command -v notify-send >/dev/null; then
+    . "$OSD_LIB"
+    osd_show_progress "brightness" "$OSD_ID_BRIGHTNESS" "🔆" "Brightness ${PERCENT}%" "$PERCENT"
+fi
+pkill -RTMIN+10 i3blocks 2>/dev/null || true
