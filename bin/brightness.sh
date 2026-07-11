@@ -90,6 +90,6 @@ PERCENT=$((NEW * 100 / MAX_BRIGHTNESS))
 OSD_LIB="$HOME/dotfiles/scripts/osd/osd-panel.sh"
 if [ -f "$OSD_LIB" ] && command -v notify-send >/dev/null; then
     . "$OSD_LIB"
-    osd_show_progress "brightness" "$OSD_ID_BRIGHTNESS" "🔆" "Brightness ${PERCENT}%" "$PERCENT"
+    osd_show_progress "brightness" "$OSD_ID_BRIGHTNESS" "🔆" "Brightness ${PERCENT}%" "$PERCENT" || true
 fi
 pkill -RTMIN+10 i3blocks 2>/dev/null || true
