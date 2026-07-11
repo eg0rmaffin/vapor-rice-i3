@@ -1,0 +1,40 @@
+[Unit]
+Description=Clean Mic - Noise-suppressed microphone filter-chain
+Documentation=https://github.com/eg0rmaffin/vapor-rice-i3
+# Start after PipeWire is ready (we need protocol-native to connect)
+After=pipewire.service wireplumber.service
+# Require PipeWire — if PipeWire isn't running, don't start Clean Mic
+Requires=pipewire.service
+# If PipeWire is stopped, stop Clean Mic too
+BindsTo=pipewire.service
+
+[Service]
+Type=simple
+
+# Run the filter-chain as a dedicated PipeWire instance
+# This is more reliable than context.modules drop-ins because:
+#   1. Startup success/failure is explicit (exit code)
+#   2. Errors are logged to journal
+#   3. Systemd tracks the process state
+#   4. Restarts are handled automatically
+#
+# The -c flag tells PipeWire to use this specific config file
+# instead of the default pipewire.conf
+ExecStart=/usr/bin/pipewire -c %h/.config/pipewire/clean-mic-filter-chain.conf
+
+# Don't restart automatically — if RNNoise plugin is missing,
+# restarting won't help and will just spam the logs.
+# User should check 'systemctl --user status pipewire-clean-mic' to diagnose.
+Restart=no
+
+# Set LADSPA plugin path explicitly
+# This ensures librnnoise_ladspa.so can be found
+Environment=LADSPA_PATH=/usr/lib/ladspa:/usr/lib64/ladspa
+
+# Inherit XDG runtime dir for socket communication
+Environment=XDG_RUNTIME_DIR=%t
+
+[Install]
+# Start with pipewire.service, but only if explicitly enabled
+# This means Clean Mic is opt-in — install.sh must enable it
+WantedBy=pipewire.service

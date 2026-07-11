@@ -6,21 +6,438 @@ set -e
 GREEN="\033[0;32m"
 YELLOW="\033[1;33m"
 CYAN="\033[0;36m"
+RED="\033[0;31m"
 RESET="\033[0m"
 
 # ─────────────────────────────────────────────
-# 🧩 helper: установка списков пакетов
-install_list() {
-  local -a pkgs=("$@")
-  for pkg in "${pkgs[@]}"; do
-    if ! pacman -Q "$pkg" &>/dev/null; then
-      echo -e "${YELLOW}📦 Installing $pkg...${RESET}"
-      sudo pacman -S --noconfirm "$pkg"
-    else
-      echo -e "${GREEN}✅ $pkg already installed${RESET}"
-    fi
-  done
+# 📋 In-memory tracking for reproducibility drift
+# Packages that are repo-missing but locally-installed
+# (will be reported at end of run)
+declare -a REPO_MISSING_LOCAL_INSTALLED=()
+
+# ─────────────────────────────────────────────
+# ⏱ Sync cache: skip pacman sync if already done recently
+# Override: pass --force-sync or set FORCE_SYNC=1
+# NEW: --upgrade flag to force full system upgrade
+# NEW: --no-upgrade flag to skip upgrade even when sync is needed
+# NEW: --repair-keyring flag — emergency: repair pacman keyring state and EXIT
+#      (does NOT continue into the dotfiles install flow). See check_explicit_keyring_repair.
+SYNC_COOLDOWN=3600  # seconds (1 hour)
+SYNC_STAMP="$HOME/.cache/vapor-rice/last-sync"
+UPGRADE_STAMP="$HOME/.cache/vapor-rice/last-upgrade"
+
+FORCE_SYNC=0
+FORCE_UPGRADE=0
+NO_UPGRADE=0
+REPAIR_KEYRING=0
+for arg in "$@"; do
+    [[ "$arg" == "--force-sync" ]] && FORCE_SYNC=1
+    [[ "$arg" == "--upgrade" ]] && FORCE_UPGRADE=1
+    [[ "$arg" == "--no-upgrade" ]] && NO_UPGRADE=1
+    [[ "$arg" == "--repair-keyring" ]] && REPAIR_KEYRING=1
+done
+
+needs_sync() {
+    [[ "$FORCE_SYNC" -eq 1 ]] && return 0
+    [[ ! -f "$SYNC_STAMP" ]] && return 0
+    local last now age
+    last=$(cat "$SYNC_STAMP" 2>/dev/null || echo 0)
+    now=$(date +%s)
+    age=$(( now - last ))
+    [[ "$age" -ge "$SYNC_COOLDOWN" ]]
 }
+
+mark_synced() {
+    mkdir -p "$(dirname "$SYNC_STAMP")"
+    date +%s > "$SYNC_STAMP"
+}
+
+mark_upgraded() {
+    mkdir -p "$(dirname "$UPGRADE_STAMP")"
+    date +%s > "$UPGRADE_STAMP"
+}
+
+# ─────────────────────────────────────────────
+# 🔐 Keyring: OFFLINE-FIRST keyring repair
+# This function is ONLY called as a fallback when PGP signature errors occur.
+# It does NOT contact keyservers, does NOT use --refresh-keys.
+# Fully offline repair using installed archlinux-keyring package.
+repair_keyring_offline() {
+    echo -e "${YELLOW}🔐 Repairing keyring (offline mode)...${RESET}"
+
+    # Remove broken keyring and reinitialize from installed archlinux-keyring
+    sudo rm -rf /etc/pacman.d/gnupg
+    sudo pacman-key --init
+    sudo pacman-key --populate archlinux
+
+    echo -e "${GREEN}✅ Keyring repaired (offline)${RESET}"
+}
+
+# ─────────────────────────────────────────────
+# 🔐 Explicit keyring repair (emergency manual command — triggered by --repair-keyring)
+# Deterministic, OFFLINE-FIRST recovery for the classic Arch "keyring / trustdb is
+# stale or broken" failures that block any upgrade:
+#   - invalid or corrupted package (PGP signature)
+#   - signature is marginal trust
+#   - unknown trust
+#   - keyring not initialized
+# It does NOT use --refresh-keys (slow/flaky) and does NOT touch SigLevel or disable
+# signature verification — package signature checking stays fully intact.
+perform_keyring_repair() {
+    echo -e "${CYAN}🔐 Explicit pacman keyring repair requested...${RESET}"
+
+    # ─── Safety: never repair under a live package transaction ───
+    # Reinitializing the keyring while pacman/yay/makepkg is mid-transaction can
+    # corrupt state. If a real process is running, refuse and bail out — we
+    # deliberately do NOT blindly delete the pacman db lock.
+    local proc running=""
+    for proc in pacman yay makepkg; do
+        if pgrep -x "$proc" >/dev/null 2>&1; then
+            running="$proc"
+            break
+        fi
+    done
+    if [ -n "$running" ]; then
+        echo -e "${RED}❌ Another package manager process is running: ${running}${RESET}"
+        echo -e "${YELLOW}   Refusing to repair the keyring while a transaction may be active.${RESET}"
+        echo -e "${YELLOW}   Wait for it to finish (or close it), then retry: ./install.sh --repair-keyring${RESET}"
+        exit 1
+    fi
+
+    # Make sure system time is sane enough for signature validity windows.
+    # Best-effort: enable NTP if timedatectl is available (never fatal).
+    if command -v timedatectl >/dev/null 2>&1; then
+        sudo timedatectl set-ntp true 2>/dev/null || true
+    fi
+
+    # Full offline reset from the installed archlinux-keyring package
+    # (rm gnupg dir, pacman-key --init, pacman-key --populate archlinux).
+    repair_keyring_offline
+
+    # Refresh databases and update ONLY the archlinux-keyring package so the
+    # trustdb is rebuilt from the newest keyring. This is the single online step
+    # and is best-effort: the offline reset above is the deterministic core, so a
+    # network/mirror/lock failure here must NOT undo the repair we just did.
+    if sudo pacman -Sy --noconfirm archlinux-keyring; then
+        # Repopulate again so the trustdb reflects the just-updated keyring.
+        sudo pacman-key --populate archlinux
+        echo -e "${GREEN}✅ Pacman keyring repaired and archlinux-keyring updated${RESET}"
+    else
+        echo -e "${YELLOW}⚠️  Could not update archlinux-keyring online (network, mirror, or pacman lock).${RESET}"
+        echo -e "${YELLOW}   The offline keyring reset already completed — core trust state is restored.${RESET}"
+        echo -e "${GREEN}✅ Pacman keyring repaired (offline reset applied)${RESET}"
+    fi
+
+    echo -e "${CYAN}You can now retry:${RESET}"
+    echo -e "  yay -Syu"
+}
+
+# Legacy function for --upgrade flag (explicit user request)
+# Only called when user explicitly requests full upgrade
+ensure_keyring_for_upgrade() {
+    echo -e "${CYAN}🔐 Checking pacman keyring...${RESET}"
+
+    # Check if keyring directory exists
+    if [ ! -d /etc/pacman.d/gnupg ]; then
+        echo -e "${YELLOW}⚠️  Keyring not initialized, setting up...${RESET}"
+        sudo pacman-key --init
+        sudo pacman-key --populate archlinux
+        echo -e "${GREEN}✅ Keyring initialized${RESET}"
+        return 0
+    fi
+
+    echo -e "${GREEN}✅ Keyring OK${RESET}"
+}
+
+# ─────────────────────────────────────────────
+# 🔄 System Upgrade: FALLBACK-ONLY full system upgrade
+# IMPORTANT: This is NOT called during normal runs.
+# It is ONLY triggered as a fallback when:
+#   1. --upgrade flag is explicitly passed
+#   2. Dependency conflict detected during package installation
+# This makes -Syu a recovery boundary, not a periodic action.
+perform_system_upgrade() {
+    echo -e "${CYAN}🔄 Running full system upgrade (pacman -Syu)...${RESET}"
+
+    # Ensure keyring is valid before upgrade
+    ensure_keyring_for_upgrade
+
+    sudo pacman -Syu --noconfirm
+    mark_synced
+    mark_upgraded
+    echo -e "${GREEN}✅ System upgraded and synced${RESET}"
+}
+
+# Check if explicit upgrade was requested via --upgrade flag
+check_explicit_upgrade() {
+    if [[ "$FORCE_UPGRADE" -eq 1 ]]; then
+        echo -e "${CYAN}🔄 Full system upgrade requested (--upgrade flag)${RESET}"
+        perform_system_upgrade
+        return 0
+    fi
+    return 1
+}
+
+# Check if explicit keyring repair was requested via the --repair-keyring flag.
+# When set, repair the keyring and EXIT immediately. This must NOT continue into
+# the dotfiles install flow (packages, symlinks, audio, hardware, etc.) — it does
+# exactly one thing: repair Arch pacman keyring state.
+#
+# Combined-flag note: if --repair-keyring is passed together with other flags
+# (e.g. --upgrade), the keyring is repaired and the script exits regardless.
+# This explicit "repair and exit" behavior is intentional for the first version.
+check_explicit_keyring_repair() {
+    if [[ "$REPAIR_KEYRING" -eq 1 ]]; then
+        perform_keyring_repair
+        exit 0
+    fi
+}
+
+# ─────────────────────────────────────────────
+# 🔧 AUR Helper: self-healing yay installation
+# Detects libalpm mismatch and auto-rebuilds
+ensure_aur_helper() {
+    echo -e "${CYAN}🔧 Checking AUR helper (yay)...${RESET}"
+
+    local yay_path
+    yay_path=$(command -v yay 2>/dev/null || true)
+
+    # Check if yay exists
+    if [ -z "$yay_path" ]; then
+        echo -e "${YELLOW}📦 yay not found, installing...${RESET}"
+        _install_yay
+        return 0
+    fi
+
+    # Check if yay works (catches libalpm mismatch)
+    if ! yay --version &>/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  yay is broken (likely libalpm mismatch), rebuilding...${RESET}"
+        _rebuild_yay
+        return 0
+    fi
+
+    # Deep check: verify libalpm linkage
+    local ldd_output
+    ldd_output=$(ldd "$yay_path" 2>&1 || true)
+    if echo "$ldd_output" | grep -q "not found"; then
+        echo -e "${YELLOW}⚠️  yay has missing library dependencies, rebuilding...${RESET}"
+        _rebuild_yay
+        return 0
+    fi
+
+    echo -e "${GREEN}✅ yay is working${RESET}"
+}
+
+_install_yay() {
+    local tmp_dir="/tmp/yay-install-$$"
+    git clone https://aur.archlinux.org/yay.git "$tmp_dir"
+    pushd "$tmp_dir" > /dev/null
+    makepkg -si --noconfirm
+    popd > /dev/null
+    rm -rf "$tmp_dir"
+    echo -e "${GREEN}✅ yay installed${RESET}"
+}
+
+_rebuild_yay() {
+    # Remove broken yay first
+    sudo pacman -Rns --noconfirm yay 2>/dev/null || true
+
+    # Rebuild from AUR
+    _install_yay
+    echo -e "${GREEN}✅ yay rebuilt successfully${RESET}"
+}
+
+# ─────────────────────────────────────────────
+# 🧩 helper: установка списков пакетов (declarative, idempotent)
+# Uses --needed flag for efficient batch installation
+# OFFLINE-FIRST: No -Syu unless actual errors occur
+# Handles dependency conflicts and PGP errors with fallback recovery
+install_list() {
+    local -a pkgs=("$@")
+    local -a missing=()
+
+    # Filter to only missing packages (for cleaner output)
+    for pkg in "${pkgs[@]}"; do
+        if ! pacman -Q "$pkg" &>/dev/null; then
+            missing+=("$pkg")
+        fi
+    done
+
+    if [ ${#missing[@]} -eq 0 ]; then
+        echo -e "${GREEN}✅ All packages already installed${RESET}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}📦 Installing ${#missing[@]} packages: ${missing[*]::5}...${RESET}"
+
+    # ─── Explicit Capture Boundary ───────────────────────────────────
+    # IMPORTANT: Disable errexit locally to guarantee we always capture
+    # both stdout/stderr AND the exit code before any error handling.
+    #
+    # Under global set -e, command substitution with a failing command
+    # may exit the script immediately (shell-dependent behavior), which
+    # would prevent:
+    #   1. Capturing the exit status
+    #   2. Printing diagnostic output
+    #   3. Running fallback recovery (keyring repair, system upgrade)
+    #
+    # This pattern preserves global fail-fast semantics while making
+    # install_list() an explicit error-capture boundary.
+    # ─────────────────────────────────────────────────────────────────
+    local install_output install_status
+    set +e
+    install_output=$(sudo pacman -S --needed --noconfirm "${pkgs[@]}" 2>&1)
+    install_status=$?
+    set -e
+
+    if [ $install_status -eq 0 ]; then
+        echo -e "${GREEN}✅ Packages installed${RESET}"
+        return 0
+    fi
+
+    # ─── Error Handling: Fallback Recovery ───
+    # Always print the error output first so the user sees what happened
+    echo -e "${RED}❌ Package installation failed (exit code $install_status)${RESET}"
+    echo -e "${YELLOW}─── pacman output ───${RESET}"
+    echo "$install_output"
+    echo -e "${YELLOW}─────────────────────${RESET}"
+
+    # Check for PGP signature errors → offline keyring repair
+    if echo "$install_output" | grep -qi "invalid or corrupted package (PGP signature)"; then
+        echo -e "${YELLOW}⚠️  PGP signature error detected${RESET}"
+        echo -e "${CYAN}🔐 Attempting offline keyring repair...${RESET}"
+
+        repair_keyring_offline
+
+        echo -e "${CYAN}📦 Retrying package installation...${RESET}"
+        if sudo pacman -S --needed --noconfirm "${pkgs[@]}"; then
+            echo -e "${GREEN}✅ Packages installed after keyring repair${RESET}"
+            return 0
+        else
+            echo -e "${RED}❌ Package installation still failed after keyring repair${RESET}"
+            return 1
+        fi
+    fi
+
+    # Check for dependency conflict errors → fallback to -Syu
+    if echo "$install_output" | grep -qE "could not satisfy dependencies|breaks dependency"; then
+        echo -e "${YELLOW}⚠️  Dependency conflict detected:${RESET}"
+        echo "$install_output" | grep -E "(could not satisfy|breaks dependency)" | head -5
+        echo ""
+        echo -e "${CYAN}🔄 Performing single fallback system upgrade to resolve...${RESET}"
+
+        perform_system_upgrade
+
+        echo -e "${CYAN}📦 Retrying package installation...${RESET}"
+        if sudo pacman -S --needed --noconfirm "${pkgs[@]}"; then
+            echo -e "${GREEN}✅ Packages installed after system upgrade${RESET}"
+            return 0
+        else
+            echo -e "${RED}❌ Package installation still failed after system upgrade${RESET}"
+            echo -e "${RED}Please check the error above and resolve manually.${RESET}"
+            return 1
+        fi
+    fi
+
+    # ─── Check for "target not found" errors (repo-missing packages) ───
+    # This handles a specific case where:
+    #   - A package was valid when the installer was written
+    #   - The package is no longer in current repositories
+    #   - But the package may still be installed locally
+    #
+    # If ALL missing packages are already installed locally → non-fatal warning
+    # If ANY missing package is also not installed locally → fatal error
+    if echo "$install_output" | grep -q "error: target not found:"; then
+        local -a target_not_found=()
+        local -a truly_missing=()
+        local -a locally_installed=()
+
+        # Extract package names from "error: target not found: <pkg>" lines
+        while IFS= read -r line; do
+            local pkg_name
+            pkg_name=$(echo "$line" | sed -n 's/.*error: target not found: \([^ ]*\).*/\1/p')
+            if [ -n "$pkg_name" ]; then
+                target_not_found+=("$pkg_name")
+            fi
+        done < <(echo "$install_output" | grep "error: target not found:")
+
+        # Check each package: is it installed locally?
+        for pkg in "${target_not_found[@]}"; do
+            if pacman -Q "$pkg" &>/dev/null; then
+                locally_installed+=("$pkg")
+                echo -e "${YELLOW}⚠️  $pkg: not in repos, but installed locally (v$(pacman -Q "$pkg" | awk '{print $2}'))${RESET}"
+            else
+                truly_missing+=("$pkg")
+            fi
+        done
+
+        # If ALL repo-missing packages are installed locally → non-fatal
+        if [ ${#truly_missing[@]} -eq 0 ] && [ ${#locally_installed[@]} -gt 0 ]; then
+            echo -e "${YELLOW}───────────────────────────────────────────${RESET}"
+            echo -e "${YELLOW}⚠️  ${#locally_installed[@]} package(s) not in current repos but installed locally${RESET}"
+            echo -e "${YELLOW}   Current machine is OK. Fresh install may need package list update.${RESET}"
+            echo -e "${YELLOW}───────────────────────────────────────────${RESET}"
+
+            # Record for end-of-run summary
+            for pkg in "${locally_installed[@]}"; do
+                REPO_MISSING_LOCAL_INSTALLED+=("$pkg")
+            done
+
+            # Now retry installation WITHOUT the repo-missing packages
+            local -a remaining_pkgs=()
+            for pkg in "${pkgs[@]}"; do
+                local is_repo_missing=0
+                for missing in "${locally_installed[@]}"; do
+                    if [ "$pkg" == "$missing" ]; then
+                        is_repo_missing=1
+                        break
+                    fi
+                done
+                if [ "$is_repo_missing" -eq 0 ]; then
+                    remaining_pkgs+=("$pkg")
+                fi
+            done
+
+            if [ ${#remaining_pkgs[@]} -gt 0 ]; then
+                echo -e "${CYAN}📦 Retrying installation of ${#remaining_pkgs[@]} remaining packages...${RESET}"
+                if sudo pacman -S --needed --noconfirm "${remaining_pkgs[@]}"; then
+                    echo -e "${GREEN}✅ Remaining packages installed${RESET}"
+                    return 0
+                else
+                    echo -e "${RED}❌ Failed to install remaining packages${RESET}"
+                    return 1
+                fi
+            else
+                echo -e "${GREEN}✅ All requested packages already satisfied (locally installed)${RESET}"
+                return 0
+            fi
+        fi
+
+        # If ANY package is truly missing (not in repos AND not installed) → fatal
+        if [ ${#truly_missing[@]} -gt 0 ]; then
+            echo -e "${RED}───────────────────────────────────────────${RESET}"
+            echo -e "${RED}❌ ${#truly_missing[@]} package(s) not found and not installed locally:${RESET}"
+            for pkg in "${truly_missing[@]}"; do
+                echo -e "${RED}   - $pkg${RESET}"
+            done
+            echo -e "${RED}───────────────────────────────────────────${RESET}"
+            echo -e "${RED}These packages cannot be installed. Update the package list or find replacements.${RESET}"
+            return 1
+        fi
+    fi
+
+    # Unknown error - output already printed above, just fail explicitly
+    echo -e "${RED}❌ Unknown error - no automatic recovery available${RESET}"
+    echo -e "${RED}Please check the pacman output above and resolve manually.${RESET}"
+    return 1
+}
+
+# ─────────────────────────────────────────────
+# 🔐 Explicit keyring repair short-circuit (emergency manual command)
+# MUST run before ANY install-flow side effects (multilib, mirrors, packages,
+# symlinks, audio, hardware…). If --repair-keyring was passed, this repairs the
+# pacman keyring and exits 0 — doing exactly one thing and nothing else.
+check_explicit_keyring_repair
 
 # ─────────────────────────────────────────────
 # 🚀 Шапка
@@ -32,11 +449,11 @@ echo -e "${RESET}"
 
 # ─────────────────────────────────────────────
 # 🧱 Включаем multilib
+MULTILIB_CHANGED=0
 if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
     echo -e "${YELLOW}🔧 Добавляем multilib репозиторий...${RESET}"
     sudo sed -i '/#\[multilib\]/,/#Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
-    echo -e "${CYAN}🔄 Обновляем кеш pacman...${RESET}"
-    sudo pacman -Sy
+    MULTILIB_CHANGED=1
     echo -e "${GREEN}✅ multilib репозиторий активирован${RESET}"
 else
     echo -e "${GREEN}✅ multilib уже включён${RESET}"
@@ -44,27 +461,41 @@ fi
 
 # ─────────────────────────────────────────────
 # ─────────────────────────────────────────────
-# 🌐 Обновление зеркал (с кешем и фоллбеком)
-echo -e "${CYAN}🌐 Проверяем зеркала...${RESET}"
+# 🌐 Mirror management (offline-first design)
+#
+# OFFLINE-FIRST RULE: No implicit system upgrades!
+# This section ONLY touches /etc/pacman.d/mirrorlist.
+# System upgrades are FALLBACK-ONLY (triggered by actual errors during install).
+
+# Note: multilib enabling no longer forces upgrade. The install_list function
+# will handle any dependency conflicts via fallback recovery if needed.
+
+# ─────────────────────────────────────────────
+# 🪞 Mirror configuration (separate from pacman sync)
+# This ONLY touches /etc/pacman.d/mirrorlist, NOT pacman DB
 
 MIRROR_CACHE="$HOME/.cache/mirrorlist"
 CACHE_AGE_DAYS=7
 
-# 1️⃣ Убедимся, что reflector установлен
-if ! command -v reflector &>/dev/null; then
-    echo -e "${YELLOW}📦 Устанавливаем reflector...${RESET}"
-    sudo pacman -S --noconfirm reflector
-fi
+# Helper: test if a mirror URL is reachable (no pacman DB refresh!)
+test_mirror_reachable() {
+    local mirror_url="$1"
+    # Use curl to check if mirror is reachable, NOT pacman -Sy
+    curl -sI --connect-timeout 5 --max-time 10 "$mirror_url" >/dev/null 2>&1
+}
 
-# 2️⃣ Бэкапим текущий список
-sudo cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
-
-# 3️⃣ Функция обновления зеркал
+# Helper: update mirrors via reflector
 update_mirrors() {
     echo -e "${CYAN}🔄 Обновляем зеркала через reflector (~1 мин)...${RESET}"
-    
+
+    # Ensure reflector is installed (--needed is idempotent)
+    if ! command -v reflector &>/dev/null; then
+        echo -e "${YELLOW}📦 Installing reflector...${RESET}"
+        sudo pacman -S --needed --noconfirm reflector
+    fi
+
     echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' > /tmp/mirrorlist.new
-    
+
     if sudo reflector \
         --country Russia,Kazakhstan,Germany,Netherlands,Sweden,Finland \
         --protocol https \
@@ -75,36 +506,40 @@ update_mirrors() {
         --sort rate \
         --save /tmp/mirrorlist.reflector 2>/dev/null && \
        grep -q '^Server' /tmp/mirrorlist.reflector; then
-        
+
         cat /tmp/mirrorlist.reflector >> /tmp/mirrorlist.new
         echo -e "${GREEN}✅ Добавлено $(grep -c '^Server' /tmp/mirrorlist.reflector) зеркал${RESET}"
     else
         echo -e "${YELLOW}⚠️ Reflector не отработал, используем только geo CDN${RESET}"
     fi
-    
+
     mkdir -p "$(dirname "$MIRROR_CACHE")"
     cp /tmp/mirrorlist.new "$MIRROR_CACHE"
     sudo mv /tmp/mirrorlist.new /etc/pacman.d/mirrorlist
+    echo -e "${GREEN}✅ Mirrorlist updated${RESET}"
 }
 
-# 4️⃣ Проверяем кеш
+# Check if mirrors need updating (independent of pacman sync)
 if [ -f "$MIRROR_CACHE" ] && [ -n "$(find "$MIRROR_CACHE" -mtime -$CACHE_AGE_DAYS 2>/dev/null)" ]; then
     echo -e "${GREEN}✅ Используем закешированные зеркала (<$CACHE_AGE_DAYS дней)${RESET}"
     sudo cp "$MIRROR_CACHE" /etc/pacman.d/mirrorlist
-    
-    # Проверяем, работают ли зеркала
-    if ! sudo pacman -Sy --noconfirm 2>/dev/null; then
-        echo -e "${YELLOW}⚠️ Закешированные зеркала не работают, обновляем...${RESET}"
+
+    # Validate mirrors work using curl (NOT pacman -Sy)
+    if ! test_mirror_reachable "https://geo.mirror.pkgbuild.com/core/os/x86_64/"; then
+        echo -e "${YELLOW}⚠️ Cached mirrors unreachable, refreshing...${RESET}"
         update_mirrors
     fi
-    # Note: bind (DNS utils package) is installed via deps array
 else
+    # Backup current mirrorlist before updating
+    sudo cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
     update_mirrors
 fi
 
-# 5️⃣ Финальная синхронизация
-sudo pacman -Syy --noconfirm
-echo -e "${GREEN}✅ Mirrorlist готов${RESET}"
+# ─────────────────────────────────────────────
+# 🔄 OFFLINE-FIRST: Only perform explicit upgrade if --upgrade flag was passed
+# Normal runs (99% of cases) skip system upgrade entirely for fast, deterministic execution.
+# System upgrades are FALLBACK-ONLY: triggered by dependency conflicts or PGP errors during install.
+check_explicit_upgrade || true
 
 # ─────────────────────────────────────────────
 # 📦 Зависимости pacman
@@ -141,10 +576,19 @@ deps=(
 	fd
 	htop
 	unzip
+    mpv #video player
 	zip
 	network-manager-applet
 	obsidian
 	light #определяет яркость
+    ollama #работа с llm
+    docker
+    wget
+    polkit-gnome  # polkit authentication agent
+    #java
+    jdk8-openjdk
+    jdk17-openjdk
+    jdk21-openjdk
 	# Звуковая система
     	pipewire
     	pipewire-pulse
@@ -154,6 +598,9 @@ deps=(
     	pamixer
     	pavucontrol
     	sof-firmware
+	# Note: Microphone processing plugin (noise-suppression-for-voice)
+	# is installed SEPARATELY below with graceful error handling.
+	# Clean Mic is an optional enhancement — installation failures don't break audio.
 	#utils
 	cbatticon #battery status icon in system tray
 	p7zip
@@ -162,6 +609,7 @@ deps=(
 	xournalpp #доска для рисования
 	thunderbird #thunderbird (no comments)
     bind #для сетевых тестов
+    openbsd-netcat #ssh через socks5
 	playerctl #управление медиаплеерами (MPRIS)
     mesa-utils   # OpenGL diagnostics (glxinfo, glxgears)
     glmark2      # GPU benchmark (visual sanity check)
@@ -190,19 +638,10 @@ deps=(
 # было: явный for-цикл; стало: вызов хелпера
 install_list "${deps[@]}"
 
-#-------- AUR pacs ----------
-
-if ! command -v yay &>/dev/null; then
-    echo -e "${YELLOW}📦 yay не найден, клонируем и устанавливаем...${RESET}"
-    git clone https://aur.archlinux.org/yay.git /tmp/yay
-    pushd /tmp/yay > /dev/null
-    makepkg -si --noconfirm
-    popd > /dev/null
-    rm -rf /tmp/yay
-    echo -e "${GREEN}🧹 Временная папка /tmp/yay удалена${RESET}"
-else
-    echo -e "${GREEN}✅ yay уже установлен${RESET}"
-fi
+# ─────────────────────────────────────────────
+# 🔧 AUR packages (requires yay)
+# Use ensure_aur_helper() to handle broken yay (libalpm mismatch, etc.)
+ensure_aur_helper
 
 aur_pkgs=(
     xkb-switch
@@ -211,8 +650,13 @@ aur_pkgs=(
     catppuccin-gtk-theme-mocha
     chicago95-icon-theme
     shadowsocks-rust #sslocal для аутлайн протокола впн
-    woeusb-ng #типо rufus для прошивки флешек (только iso винды)
     hiddify-next-bin #современный клиент для VLESS+Reality протоколов впн
+    happ #тоже vless reality клиент
+
+    #отключено потому что однажды что то сломало
+    #стоит конкретно подумать как лучше быть допустим optional или как
+    #в целом конечно аур пакеты использовать надо очень осторожно это понятно
+    #woeusb-ng #типо rufus для прошивки флешек (только iso винды)
 )
 
 for pkg in "${aur_pkgs[@]}"; do
@@ -242,8 +686,12 @@ echo -e "${CYAN}📦 Installing VirtualBox and modules...${RESET}"
 # было: второй явный for-цикл; стало: тот же хелпер
 install_list "${vbox_pkgs[@]}"
 
-echo -e "${CYAN}📦 Loading vboxdrv module...${RESET}"
-sudo modprobe vboxdrv || echo -e "${YELLOW}⚠️ Не удалось загрузить vboxdrv — возможно, нужно перезагрузить систему${RESET}"
+if ! lsmod | grep -q '^vboxdrv'; then
+    echo -e "${CYAN}📦 Loading vboxdrv module...${RESET}"
+    sudo modprobe vboxdrv || echo -e "${YELLOW}⚠️ Не удалось загрузить vboxdrv — возможно, нужно перезагрузить систему${RESET}"
+else
+    echo -e "${GREEN}✅ vboxdrv already loaded${RESET}"
+fi
 
 echo -e "${CYAN}👤 Добавляем пользователя в группу vboxusers...${RESET}"
 sudo usermod -aG vboxusers "$USER"
@@ -352,6 +800,45 @@ mkdir -p ~/.config/rofi
 ln -sf ~/dotfiles/rofi/config.rasi ~/.config/rofi/config.rasi
 echo -e "${GREEN}✅ Rofi config linked${RESET}"
 
+# 📸 Flameshot (screenshot backend)
+# On Arch + X11/i3 Flameshot may try the Wayland screenshot portal and hang with
+# "screenshot portal retry after 30 sec". Force the legacy X11 backend so that
+# `flameshot gui` / `flameshot screen` (used by ~/dotfiles/bin/screenshot.sh) work.
+# The .ini is owned/rewritten by Flameshot at runtime, so we patch it idempotently
+# in place instead of symlinking — preserving any unrelated user settings.
+echo -e "${CYAN}📸 Ensuring Flameshot uses the X11 legacy screenshot backend...${RESET}"
+FLAMESHOT_INI="$HOME/.config/flameshot/flameshot.ini"
+mkdir -p "$(dirname "$FLAMESHOT_INI")"
+touch "$FLAMESHOT_INI"
+awk '
+    BEGIN { in_general = 0; done = 0; general_seen = 0 }
+    /^\[/ {
+        # Leaving a section: if we were in [General] but never found the key, add it.
+        if (in_general && !done) { print "useX11LegacyScreenshot=true"; done = 1 }
+        in_general = ($0 == "[General]")
+        if (in_general) general_seen = 1
+        print
+        next
+    }
+    {
+        if (in_general && $0 ~ /^useX11LegacyScreenshot[[:space:]]*=/) {
+            print "useX11LegacyScreenshot=true"
+            done = 1
+            next
+        }
+        print
+    }
+    END {
+        if (in_general && !done) { print "useX11LegacyScreenshot=true"; done = 1 }
+        if (!general_seen) {
+            if (NR > 0) print ""
+            print "[General]"
+            print "useX11LegacyScreenshot=true"
+        }
+    }
+' "$FLAMESHOT_INI" > "$FLAMESHOT_INI.tmp" && mv "$FLAMESHOT_INI.tmp" "$FLAMESHOT_INI"
+echo -e "${GREEN}✅ Flameshot X11 legacy screenshot backend enabled${RESET}"
+
 # 🟣 Discord Proxy
 echo -e "${CYAN}🔧 Linking Discord Proxy...${RESET}"
 
@@ -410,13 +897,25 @@ echo -e "${GREEN}✅ Udev rule written to $UDEV_RULE${RESET}"
 
 
 # ─── 🌐 Локали ────────
-sudo sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
-sudo sed -i 's/^#ru_RU.UTF-8 UTF-8/ru_RU.UTF-8 UTF-8/' /etc/locale.gen
+LOCALE_CHANGED=0
+if ! grep -q '^en_US.UTF-8 UTF-8' /etc/locale.gen; then
+    sudo sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+    LOCALE_CHANGED=1
+fi
+if ! grep -q '^ru_RU.UTF-8 UTF-8' /etc/locale.gen; then
+    sudo sed -i 's/^#ru_RU.UTF-8 UTF-8/ru_RU.UTF-8 UTF-8/' /etc/locale.gen
+    LOCALE_CHANGED=1
+fi
 
-sudo locale-gen
+if [[ "$LOCALE_CHANGED" -eq 1 ]] || ! locale -a 2>/dev/null | grep -q 'en_US.utf8'; then
+    sudo locale-gen
+    echo -e "${GREEN}✅ Локали сгенерированы${RESET}"
+else
+    echo -e "${GREEN}✅ Локали уже настроены${RESET}"
+fi
 
-echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf
-echo 'KEYMAP=us' | sudo tee /etc/vconsole.conf
+echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf > /dev/null
+echo 'KEYMAP=us' | sudo tee /etc/vconsole.conf > /dev/null
 
 
 # Активируем службы systemd для звука (после установки пакетов)
@@ -431,10 +930,58 @@ for service in pipewire.service pipewire-pulse.service wireplumber.service; do
     fi
 done
 
+# ─── 🎙 Microphone enhancement: Clean Mic RNNoise plugin (OPTIONAL) ───
+# This plugin enables the Clean Mic filter-chain:
+#   - noise-suppression-for-voice: RNNoise for background noise removal
+#
+# NOTE: Limiter (swh-plugins) removed for version-tolerance.
+#   The fast_lookahead_limiter uses port names that vary between PipeWire versions,
+#   causing filter-chain failures on PipeWire 1.4.x. RNNoise alone provides the
+#   primary value (noise reduction) and is stable across all PipeWire versions.
+#
+# IMPORTANT: This is NON-FATAL. Clean Mic is an optional enhancement layer.
+# If plugin fails to install due to dependency conflicts:
+#   - PipeWire will still start (thanks to 'nofail' flag in 60-clean-mic.conf)
+#   - All other audio functionality continues to work
+#   - Only the noise-suppression feature is unavailable
+#
+# The user can retry installation after a full system update:
+#   sudo pacman -Syu && sudo pacman -S noise-suppression-for-voice
+echo -e "${CYAN}🎙 Installing Clean Mic plugin (RNNoise)...${RESET}"
+
+CLEAN_MIC_OK=1
+
+# Install RNNoise (noise suppression)
+echo -e "${CYAN}📦 Installing noise-suppression-for-voice...${RESET}"
+if install_list noise-suppression-for-voice; then
+    echo -e "${GREEN}✅ RNNoise installed${RESET}"
+else
+    echo -e "${YELLOW}⚠️  noise-suppression-for-voice failed to install${RESET}"
+    CLEAN_MIC_OK=0
+fi
+
+# Report Clean Mic status
+if [ "$CLEAN_MIC_OK" -eq 1 ]; then
+    echo -e "${GREEN}✅ Clean Mic dependency ready (RNNoise)${RESET}"
+else
+    echo -e "${YELLOW}⚠️  Clean Mic plugin failed to install (dependency conflict?)${RESET}"
+    echo -e "${YELLOW}   Clean Mic feature will be unavailable until dependency resolves.${RESET}"
+    echo -e "${YELLOW}   Try: sudo pacman -Syu && sudo pacman -S noise-suppression-for-voice${RESET}"
+    echo -e "${YELLOW}   Note: Audio baseline (output + routing) will still work normally.${RESET}"
+fi
+
+# ─── 🎧 Deterministic audio policy (Windows-like) ───
+source ~/dotfiles/scripts/audio_policy.sh
+setup_audio_policy
 
 # ─── 🎨 Appearance policy (dark mode for browsers / portal / electron) ───
+# GTK4 apps respect color-scheme=prefer-dark, but GTK3 apps (e.g. blueman) do
+# not reliably interpret it and may fall back to light Adwaita. Setting
+# gtk-theme to Adwaita-dark removes that ambiguity for GTK3 while keeping
+# prefer-dark for portals / browsers / electron.
 if command -v gsettings >/dev/null && [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
   gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+  gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
 else
   echo -e "${YELLOW}⚠️ Skipping gsettings (no DBus session)${RESET}"
 fi
@@ -464,7 +1011,10 @@ mkdir -p ~/.local/bin
 ln -sf ~/dotfiles/scripts/osd/osd-panel.sh ~/.local/bin/osd-panel.sh
 ln -sf ~/dotfiles/scripts/osd/volume.sh ~/.local/bin/volume.sh
 ln -sf ~/dotfiles/scripts/osd/kbd-backlight.sh ~/.local/bin/kbd-backlight-osd.sh
-echo -e "${GREEN}✅ OSD scripts linked (volume, keyboard backlight)${RESET}"
+ln -sf ~/dotfiles/bin/audio-policy-check.sh ~/.local/bin/audio-policy-check.sh
+ln -sf ~/dotfiles/bin/audio-ensure-default.sh ~/.local/bin/audio-ensure-default.sh
+ln -sf ~/dotfiles/bin/clean-mic-status.sh ~/.local/bin/clean-mic-status.sh
+echo -e "${GREEN}✅ OSD scripts linked (volume, keyboard backlight, audio-policy-check, audio-ensure-default, clean-mic-status)${RESET}"
 
 # ⚡ Power menu (Win95 vaporwave style)
 echo -e "${CYAN}⚡ Linking power-menu...${RESET}"
@@ -625,6 +1175,44 @@ done
 # ─── 📸 Snapshots (Timeshift for ext4, Snapper for Btrfs) ───
 source ~/dotfiles/scripts/snapshot_setup.sh
 setup_snapshots
+
+# ─── 🧠 zram: Compressed RAM swap for memory pressure stability ───
+# Prevents full-system stalls under heavy workloads (JVM + browser + hybrid GPU)
+# by providing a compressed memory buffer before OOM conditions.
+source ~/dotfiles/scripts/zram_setup.sh
+setup_zram
+
+# Link zram diagnostic script
+echo -e "${CYAN}🔧 Linking zram-status.sh...${RESET}"
+ln -sf ~/dotfiles/bin/zram-status.sh ~/.local/bin/zram-status.sh
+echo -e "${GREEN}✅ zram-status.sh linked${RESET}"
+
+# ─────────────────────────────────────────────
+# 📋 Reproducibility Summary
+# Report any packages that were repo-missing but locally installed
+if [ ${#REPO_MISSING_LOCAL_INSTALLED[@]} -gt 0 ]; then
+    echo ""
+    echo -e "${YELLOW}┌─────────────────────────────────────────────────────────────┐${RESET}"
+    echo -e "${YELLOW}│           ⚠️  REPRODUCIBILITY DRIFT DETECTED                │${RESET}"
+    echo -e "${YELLOW}└─────────────────────────────────────────────────────────────┘${RESET}"
+    echo ""
+    echo -e "${YELLOW}The following ${#REPO_MISSING_LOCAL_INSTALLED[@]} package(s) are no longer in current repositories:${RESET}"
+    echo ""
+    for pkg in "${REPO_MISSING_LOCAL_INSTALLED[@]}"; do
+        local_version=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $2}')
+        echo -e "${YELLOW}  • $pkg (installed: $local_version)${RESET}"
+    done
+    echo ""
+    echo -e "${CYAN}What this means:${RESET}"
+    echo -e "  ✅ This machine is fine - packages are installed and working"
+    echo -e "  ⚠️  A fresh install may fail on these packages"
+    echo -e "  📝 Consider updating the package list or finding replacements"
+    echo ""
+    echo -e "${CYAN}To check package status:${RESET}"
+    echo -e "  pacman -Q <package>      # verify local installation"
+    echo -e "  pacman -Si <package>     # check repo availability"
+    echo ""
+fi
 
 # 🎉 Финал
 echo -e "${GREEN}✅ All done! You can launch i3 with \`startx\` from tty 🎉${RESET}"

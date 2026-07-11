@@ -58,8 +58,9 @@ if command -v wireplumber >/dev/null && ! pidof wireplumber >/dev/null; then
     /usr/bin/wireplumber &
 fi
 
-# Устанавливаем начальную громкость
-pactl set-sink-volume @DEFAULT_SINK@ 70% 2>/dev/null || true
+# Устанавливаем начальную громкость (100% — пользователь сам решает убавить)
+# С архитектурой виртуального синка 100% = максимальная доступная громкость
+pactl set-sink-volume @DEFAULT_SINK@ 100% 2>/dev/null || true
 pactl set-sink-mute @DEFAULT_SINK@ 0 2>/dev/null || true
 
 exit 0
