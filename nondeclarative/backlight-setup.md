@@ -35,21 +35,51 @@ The brightness control system supports multiple backlight interfaces with **auto
 
 - Primary display: AMD integrated graphics (`amdgpu_bl*`)
 - NVIDIA: Used only for specific applications via offload
-- Backlight: Controlled by AMD iGPU
+- Backlight: Controlled by AMD iGPU — **or by NVIDIA EC on some Lenovo models**
 
-### Expected Behavior
+### Expected Behavior (most laptops)
 
 ```bash
 ls /sys/class/backlight/
 # Output: amdgpu_bl0  (or similar)
 ```
 
-**No kernel parameters needed!** The backlight should work automatically because:
+**No kernel parameters needed** on most laptops because:
 - The display is driven by AMD iGPU
 - NVIDIA is in offload-only mode (not controlling the display)
 - The brightness.sh script auto-detects `amdgpu_bl*`
 
-### If Brightness Doesn't Work
+### Lenovo Legion Slim 5 16AHP9 (DMI: 83DH) — IMPORTANT
+
+On this specific model (AMD Ryzen + NVIDIA RTX 4060/4070), the panel backlight is
+controlled by the **NVIDIA Embedded Controller (EC)**, NOT the AMD iGPU.
+
+**Symptom:** `amdgpu_bl1` exists and accepts writes (sysfs values change), but
+**physical screen brightness does not change** (stuck at max).
+
+**Root cause:** The EC-based backlight requires the `nvidia_wmi_ec_backlight` kernel
+driver. With `acpi_backlight=native`, only `amdgpu_bl1` appears, which is non-functional.
+
+**Fix:**
+```bash
+# Replace acpi_backlight=native with:
+acpi_backlight=nvidia_wmi_ec
+```
+
+After reboot:
+```bash
+ls /sys/class/backlight/
+# Should show: nvidia_wmi_ec_backlight
+```
+
+The `brightness.sh` script will auto-detect `nvidia_wmi_ec_backlight` (highest priority).
+
+**References:**
+- [Arch Linux Forums — Legion S7 brightness fix](https://bbs.archlinux.org/viewtopic.php?pid=2279478)
+- [LenovoLegionLinux — Legion Slim 5 16AHP9 support](https://github.com/johnfanv2/LenovoLegionLinux/issues/218)
+- [Launchpad #1944094 — AMD hybrid brightness regression](https://bugs.launchpad.net/ubuntu/+source/linux/+bug/1944094)
+
+### If Brightness Doesn't Work (other models)
 
 1. **Check what's available:**
    ```bash
@@ -59,6 +89,10 @@ ls /sys/class/backlight/
 2. **If you see `nvidia_0` only:**
    - The NVIDIA driver is incorrectly claiming backlight control
    - Try: `acpi_backlight=native` kernel parameter (see Declarative Setup below)
+
+3. **If you see `amdgpu_bl*` but brightness doesn't change:**
+   - Your laptop may use NVIDIA EC for backlight (like Lenovo Legion 83DH)
+   - Try: `acpi_backlight=nvidia_wmi_ec` kernel parameter
 
 ## Intel + NVIDIA Hybrid (Lenovo Legion, etc.)
 
@@ -109,9 +143,11 @@ sudo reboot
 
 **Note:** The best value for `acpi_backlight` depends on your hardware:
 - `native` - Use native ACPI backlight (works for most AMD laptops)
-- `nvidia_wmi_ec` - For Lenovo Legion and similar NVIDIA WMI EC laptops
+- `nvidia_wmi_ec` - For Lenovo Legion 83DH and similar laptops where brightness is controlled by NVIDIA Embedded Controller
 - `video` - Legacy video mode
 - `vendor` - Use vendor-specific interface
+
+**For Lenovo Legion Slim 5 16AHP9 (83DH):** Use `acpi_backlight=nvidia_wmi_ec` (not `native`).
 
 ### Option 3: Dracut/mkinitcpio kernel parameter
 
@@ -177,9 +213,14 @@ xev | grep XF86
 ```
 Press brightness keys and update i3 config if key names differ.
 
-### Brightness changes but not visible
+### Brightness changes in sysfs but physical screen brightness doesn't change
 
-Wrong interface being used. Check what's available and try different kernel parameters.
+Wrong backlight interface is being used. This is common on Lenovo Legion laptops with
+AMD iGPU + NVIDIA dGPU where the panel brightness is controlled by the NVIDIA EC.
+
+1. Check your hardware: `cat /sys/class/dmi/id/product_name`
+2. If you see `83DH` (Legion Slim 5 16AHP9): use `acpi_backlight=nvidia_wmi_ec`
+3. For other models: check available interfaces and try different kernel parameters
 
 ### Permission denied
 

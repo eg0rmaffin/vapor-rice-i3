@@ -6,13 +6,20 @@ set -e
 # Автоопределение backlight устройства с приоритетом
 BACKLIGHT_DIR="/sys/class/backlight"
 
-# Проверка на проблемный Lenovo IdeaPad
+# Проверка на Lenovo Legion Slim 5 16AHP9 (83DH) — AMD iGPU + NVIDIA dGPU
+# На этом ноутбуке яркость управляется через NVIDIA EC (Embedded Controller).
+# amdgpu_bl* принимает записи, но физическая яркость не меняется.
+# Правильный интерфейс — nvidia_wmi_ec_backlight (нужен kernel param: acpi_backlight=nvidia_wmi_ec).
 PRODUCT=$(cat /sys/class/dmi/id/product_name 2>/dev/null || echo "unknown")
-if [ "$PRODUCT" = "83DH" ] && [ -d "$BACKLIGHT_DIR/ideapad" ] && ! ls "$BACKLIGHT_DIR"/amdgpu_bl* "$BACKLIGHT_DIR"/intel_backlight 2>/dev/null | grep -q .; then
-    echo "⚠️  Lenovo IdeaPad $PRODUCT detected with fake backlight"
-    echo "📝 Add kernel parameter: acpi_backlight=native"
-    echo "💡 After reboot, brightness will work automatically!"
-    exit 1
+if [ "$PRODUCT" = "83DH" ]; then
+    # Если nvidia_wmi_ec_backlight отсутствует — нужен kernel param
+    if [ ! -d "$BACKLIGHT_DIR/nvidia_wmi_ec_backlight" ]; then
+        echo "⚠️  Lenovo Legion Slim 5 ($PRODUCT) — backlight controlled by NVIDIA EC"
+        echo "📝 Replace kernel parameter: acpi_backlight=nvidia_wmi_ec"
+        echo "   (remove acpi_backlight=native if present)"
+        echo "💡 After reboot, nvidia_wmi_ec_backlight will appear and brightness will work!"
+        exit 1
+    fi
 fi
 
 BACKLIGHT_DEVICE=""
