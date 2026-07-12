@@ -17,6 +17,7 @@ color=#f1fa8c
 [brightness]
 command=~/dotfiles/i3blocks/brightness
 interval=5
+signal=10
 color=#50fa7b
 
 [network]
