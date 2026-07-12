@@ -6,6 +6,13 @@ fi
 
 export GTK_THEME=catppuccin-mocha-mauve-standard+default
 export GTK_ICON_THEME=Chicago95
+
+# ─── Qt platform theme (dark) ───
+# System-linked Qt apps (flameshot, future qbittorrent/OBS) don't read gsettings.
+# qt6ct provides the dark Fusion palette (~/.config/qt6ct/qt6ct.conf, symlinked by
+# install.sh). One value per session: qt6ct plugin themes Qt6 apps; Qt5 stragglers
+# fall back gracefully (qt5ct installed for anyone who prefers to flip this to qt5ct).
+export QT_QPA_PLATFORMTHEME=qt6ct
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
