@@ -631,8 +631,10 @@ deps=(
     	swappy
     	swaybg             # фон
     	xdg-desktop-portal
-        xdg-desktop-portal-wlr
-        xdg-desktop-portal-gtk #это x вещь для скриншера вроде
+        xdg-desktop-portal-gtk # X11/i3 portal backend (screenshot + org.freedesktop.appearance dark scheme)
+        # ─── Qt platform theming (dark) ───
+        qt6ct                  # Qt6 platform theme (flameshot, future qbittorrent/OBS) → dark Fusion palette
+        qt5ct                  # Qt5 stragglers (see note near QT_QPA_PLATFORMTHEME in .xinitrc)
 )
 
 # было: явный for-цикл; стало: вызов хелпера
@@ -985,6 +987,16 @@ if command -v gsettings >/dev/null && [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
 else
   echo -e "${YELLOW}⚠️ Skipping gsettings (no DBus session)${RESET}"
 fi
+
+# ─── Qt dark theme (4th delivery channel — see nondeclarative/dark-theme.md) ───
+# GTK/portal/gsettings above cover GTK + org.freedesktop.appearance consumers.
+# Qt apps linked against the system Qt (flameshot, future qbittorrent/OBS) do not
+# read gsettings; they need a Qt platform theme. qt6ct + Fusion + dark palette,
+# selected via QT_QPA_PLATFORMTHEME (exported in .xinitrc before `exec i3`).
+echo -e "${CYAN}🎨 Linking Qt dark theme (qt6ct)...${RESET}"
+mkdir -p ~/.config/qt6ct
+ln -sf ~/dotfiles/qt6ct/qt6ct.conf ~/.config/qt6ct/qt6ct.conf
+echo -e "${GREEN}✅ qt6ct.conf linked${RESET}"
 
 # ─────────────────────────────────────────────
 # 🔵 Bluetooth
