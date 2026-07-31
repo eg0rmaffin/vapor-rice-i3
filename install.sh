@@ -28,6 +28,10 @@ UPGRADE_STAMP="$HOME/.cache/vapor-rice/last-upgrade"
 
 FORCE_SYNC=0
 FORCE_UPGRADE=0
+# Set to 1 by perform_system_upgrade() when `pacman -Syu` returns non-zero.
+# The rest of the (local, network-independent) flow still runs, but the script
+# ends with a red banner and a non-zero exit code so success is never the last word.
+UPGRADE_FAILED=0
 NO_UPGRADE=0
 REPAIR_KEYRING=0
 for arg in "$@"; do
@@ -162,17 +166,31 @@ perform_system_upgrade() {
     # Ensure keyring is valid before upgrade
     ensure_keyring_for_upgrade
 
-    sudo pacman -Syu --noconfirm
-    mark_synced
-    mark_upgraded
-    echo -e "${GREEN}✅ System upgraded and synced${RESET}"
+    # Gate the stamps and the success message on pacman's exit code.
+    # A failed transaction (dead mirror mid-download, etc.) must NOT be reported
+    # as success and must NOT write the last-upgrade stamp.
+    if sudo pacman -Syu --noconfirm; then
+        mark_synced
+        mark_upgraded
+        echo -e "${GREEN}✅ System upgraded and synced${RESET}"
+        return 0
+    fi
+
+    UPGRADE_FAILED=1
+    echo -e "${RED}❌ System upgrade failed (pacman returned non-zero).${RESET}"
+    echo -e "${YELLOW}   Common cause: a mirror went down mid-download. Your system was NOT modified (pacman rolls back atomically).${RESET}"
+    echo -e "${YELLOW}   Try re-running, or refresh mirrors, then './install.sh --upgrade' again.${RESET}"
+    return 1
 }
 
 # Check if explicit upgrade was requested via --upgrade flag
 check_explicit_upgrade() {
     if [[ "$FORCE_UPGRADE" -eq 1 ]]; then
         echo -e "${CYAN}🔄 Full system upgrade requested (--upgrade flag)${RESET}"
-        perform_system_upgrade
+        # Decision (a): a failed upgrade does not stop the rest of the flow —
+        # symlinks, systemd units and gsettings are local and network-independent.
+        # The failure is surfaced loudly by the final banner (see UPGRADE_FAILED).
+        perform_system_upgrade || true
         return 0
     fi
     return 1
@@ -326,7 +344,9 @@ install_list() {
         echo ""
         echo -e "${CYAN}🔄 Performing single fallback system upgrade to resolve...${RESET}"
 
-        perform_system_upgrade
+        # Never abort here: even if the upgrade fails (dead mirror), we still want
+        # to retry the install and let the final banner report the failure.
+        perform_system_upgrade || true
 
         echo -e "${CYAN}📦 Retrying package installation...${RESET}"
         if sudo pacman -S --needed --noconfirm "${pkgs[@]}"; then
@@ -1212,6 +1232,26 @@ if [ ${#REPO_MISSING_LOCAL_INSTALLED[@]} -gt 0 ]; then
     echo -e "  pacman -Q <package>      # verify local installation"
     echo -e "  pacman -Si <package>     # check repo availability"
     echo ""
+fi
+
+# ─────────────────────────────────────────────
+# ❌ Upgrade failure banner
+# The local part of the flow is idempotent and network-independent, so a failed
+# `pacman -Syu` does not stop it — but it must never end with a green message.
+if [ "$UPGRADE_FAILED" -eq 1 ]; then
+    echo ""
+    echo -e "${RED}┌─────────────────────────────────────────────────────────────┐${RESET}"
+    echo -e "${RED}│                ❌ SYSTEM UPGRADE FAILED                     │${RESET}"
+    echo -e "${RED}└─────────────────────────────────────────────────────────────┘${RESET}"
+    echo ""
+    echo -e "${YELLOW}Dotfiles configuration was applied, but 'pacman -Syu' did NOT succeed.${RESET}"
+    echo -e "${YELLOW}The last-upgrade stamp was not written, so the upgrade will be retried.${RESET}"
+    echo ""
+    echo -e "${CYAN}Next steps:${RESET}"
+    echo -e "  ./install.sh --upgrade      # retry the upgrade (refreshes databases)"
+    echo -e "  # if a mirror is down: refresh /etc/pacman.d/mirrorlist first"
+    echo ""
+    exit 1
 fi
 
 # 🎉 Финал
