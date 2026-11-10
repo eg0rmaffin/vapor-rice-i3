@@ -30,12 +30,33 @@ FORCE_SYNC=0
 FORCE_UPGRADE=0
 NO_UPGRADE=0
 REPAIR_KEYRING=0
+PROFILE_ARG=""
 for arg in "$@"; do
     [[ "$arg" == "--force-sync" ]] && FORCE_SYNC=1
     [[ "$arg" == "--upgrade" ]] && FORCE_UPGRADE=1
     [[ "$arg" == "--no-upgrade" ]] && NO_UPGRADE=1
     [[ "$arg" == "--repair-keyring" ]] && REPAIR_KEYRING=1
+    [[ "$arg" == "--lite" ]] && PROFILE_ARG="lite"
+    [[ "$arg" == "--full" ]] && PROFILE_ARG="full"
 done
+
+# ─────────────────────────────────────────────
+# 🧩 Install profile: full (default) | lite (weak hardware: desktop only)
+# --lite / --full selects it explicitly; otherwise the last chosen profile
+# is reused, so a plain ./install.sh rerun never silently switches profiles.
+PROFILE_FILE="$HOME/.config/vapor-rice/profile"
+if [[ -n "$PROFILE_ARG" ]]; then
+    PROFILE="$PROFILE_ARG"
+elif [[ -f "$PROFILE_FILE" ]]; then
+    PROFILE=$(cat "$PROFILE_FILE")
+else
+    PROFILE="full"
+fi
+[[ "$PROFILE" == "lite" ]] || PROFILE="full"
+mkdir -p "$(dirname "$PROFILE_FILE")"
+echo "$PROFILE" > "$PROFILE_FILE"
+
+is_full() { [[ "$PROFILE" == "full" ]]; }
 
 needs_sync() {
     [[ "$FORCE_SYNC" -eq 1 ]] && return 0
@@ -446,11 +467,14 @@ echo "┌───────────────────────�
 echo "│        🚀 Installing your dotfiles         │"
 echo "└────────────────────────────────────────────┘"
 echo -e "${RESET}"
+echo -e "${CYAN}🧩 Profile: ${PROFILE}${RESET}"
 
 # ─────────────────────────────────────────────
-# 🧱 Включаем multilib
+# 🧱 Включаем multilib (нужен только для Steam / lib32 — профиль full)
 MULTILIB_CHANGED=0
-if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
+if ! is_full; then
+    echo -e "${GREEN}✅ multilib не нужен для профиля lite${RESET}"
+elif ! grep -q '^\[multilib\]' /etc/pacman.conf; then
     echo -e "${YELLOW}🔧 Добавляем multilib репозиторий...${RESET}"
     sudo sed -i '/#\[multilib\]/,/#Include = \/etc\/pacman.d\/mirrorlist/ s/^#//' /etc/pacman.conf
     MULTILIB_CHANGED=1
@@ -542,100 +566,119 @@ fi
 check_explicit_upgrade || true
 
 # ─────────────────────────────────────────────
-# 📦 Зависимости pacman
-deps=(
-	xorg-server
-	xorg-xinit
-	base-devel
-	i3-gaps
-	i3blocks
-	i3lock  # Screen locker for power-menu
-	alacritty
-	tmux
-	rofi
-	feh
-	picom
-	flameshot
-	firefox
-	xclip
-	pamixer
-	noto-fonts
-	noto-fonts-cjk
-	noto-fonts-emoji
-	noto-fonts-extra
-	neofetch
-	thunar
-	thunar-volman
-	dbus
-	polkit
-	tumbler
-	gvfs
-	gvfs-mtp
-	telegram-desktop
-	discord
-	fd
-	htop
-	unzip
+# 📦 Зависимости pacman — по группам.
+# Профиль full ставит все группы (как раньше), lite — только рабочий стол.
+
+# Рабочий стол: X11 + i3, звук, шрифты, файловый менеджер, браузер
+pkgs_desktop=(
+    xorg-server
+    xorg-xinit
+    base-devel
+    i3-gaps
+    i3blocks
+    i3lock  # Screen locker for power-menu
+    alacritty
+    tmux
+    rofi
+    feh
+    picom
+    flameshot
+    firefox
+    xclip
+    pamixer
+    noto-fonts
+    noto-fonts-cjk
+    noto-fonts-emoji
+    noto-fonts-extra
+    fastfetch  # neofetch больше нет в репозиториях
+    thunar
+    thunar-volman
+    dbus
+    polkit
+    polkit-gnome  # polkit authentication agent
+    tumbler
+    gvfs
+    gvfs-mtp
+    fd
+    htop
+    unzip
+    zip
+    p7zip
     mpv #video player
-	zip
-	network-manager-applet
-	obsidian
-	light #определяет яркость
+    network-manager-applet
+    wget
+    playerctl #управление медиаплеерами (MPRIS)
+    # Звуковая система
+    pipewire
+    pipewire-pulse
+    pipewire-alsa
+    wireplumber
+    alsa-utils
+    pavucontrol
+    sof-firmware
+    # Note: Microphone processing plugin (noise-suppression-for-voice)
+    # is installed SEPARATELY below with graceful error handling.
+    # Clean Mic is an optional enhancement — installation failures don't break audio.
+    # Порталы: тёмная тема для браузеров/electron и скриншоты (нужны и под X)
+    xdg-desktop-portal
+    xdg-desktop-portal-gtk
+)
+
+# Приложения
+pkgs_apps=(
+    telegram-desktop
+    discord
+    obsidian
+    qbittorrent
+    firejail #проверка подозрительных appImage
+    xournalpp #доска для рисования
+    thunderbird #thunderbird (no comments)
+    cbatticon #battery status icon in system tray
+)
+
+# Разработка и сетевые утилиты
+pkgs_dev=(
     ollama #работа с llm
     docker
-    wget
-    polkit-gnome  # polkit authentication agent
     #java
     jdk8-openjdk
     jdk17-openjdk
     jdk21-openjdk
-	# Звуковая система
-    	pipewire
-    	pipewire-pulse
-    	pipewire-alsa
-    	wireplumber
-    	alsa-utils
-    	pamixer
-    	pavucontrol
-    	sof-firmware
-	# Note: Microphone processing plugin (noise-suppression-for-voice)
-	# is installed SEPARATELY below with graceful error handling.
-	# Clean Mic is an optional enhancement — installation failures don't break audio.
-	#utils
-	cbatticon #battery status icon in system tray
-	p7zip
-	qbittorrent
-	firejail #проверка подозрительных appImage
-	xournalpp #доска для рисования
-	thunderbird #thunderbird (no comments)
     bind #для сетевых тестов
     openbsd-netcat #ssh через socks5
-	playerctl #управление медиаплеерами (MPRIS)
     mesa-utils   # OpenGL diagnostics (glxinfo, glxgears)
     glmark2      # GPU benchmark (visual sanity check)
-	# ─── Steam & Vulkan stack ───
-	steam                 # Steam client (runtime managed by Steam itself)
-	vulkan-icd-loader     # Vulkan loader (required for Vulkan games)
-	vulkan-tools          # vulkaninfo and other diagnostics
-	lib32-vulkan-icd-loader # 32-bit Vulkan loader (required for Proton)
-	lib32-mesa            # 32-bit Mesa (required for Steam/Proton on Intel/AMD)
-	lib32-libglvnd        # 32-bit GL vendor dispatch (multi-GPU support)
-	# ─── Wayland / Sway minimal ───
-    	sway
-        swaylock
-        swayidle
-        waybar
-    	wl-clipboard
-    	grim
-    	slurp
-    	swappy
-    	swaybg             # фон
-    	xdg-desktop-portal
-        xdg-desktop-portal-wlr
-        xdg-desktop-portal-gtk #это x вещь для скриншера вроде
 )
 
-# было: явный for-цикл; стало: вызов хелпера
+# ─── Steam & Vulkan stack ───
+pkgs_gaming=(
+    steam                 # Steam client (runtime managed by Steam itself)
+    vulkan-icd-loader     # Vulkan loader (required for Vulkan games)
+    vulkan-tools          # vulkaninfo and other diagnostics
+    lib32-vulkan-icd-loader # 32-bit Vulkan loader (required for Proton)
+    lib32-mesa            # 32-bit Mesa (required for Steam/Proton on Intel/AMD)
+    lib32-libglvnd        # 32-bit GL vendor dispatch (multi-GPU support)
+)
+
+# ─── Wayland / Sway minimal ───
+pkgs_wayland=(
+    sway
+    swaylock
+    swayidle
+    waybar
+    wl-clipboard
+    grim
+    slurp
+    swappy
+    swaybg             # фон
+    xdg-desktop-portal-wlr
+)
+
+deps=("${pkgs_desktop[@]}")
+if is_full; then
+    deps+=("${pkgs_apps[@]}" "${pkgs_dev[@]}" "${pkgs_gaming[@]}" "${pkgs_wayland[@]}")
+fi
+
 install_list "${deps[@]}"
 
 # ─────────────────────────────────────────────
@@ -643,12 +686,16 @@ install_list "${deps[@]}"
 # Use ensure_aur_helper() to handle broken yay (libalpm mismatch, etc.)
 ensure_aur_helper
 
-aur_pkgs=(
+# Нужны самому рабочему столу (индикатор раскладки, яркость, idle, тема, иконки)
+aur_desktop=(
     xkb-switch
     light
     xidlehook #media-aware idle detection (prevents screen blanking during video/audio)
     catppuccin-gtk-theme-mocha
     chicago95-icon-theme
+)
+
+aur_network=(
     shadowsocks-rust #sslocal для аутлайн протокола впн
     hiddify-next-bin #современный клиент для VLESS+Reality протоколов впн
     happ #тоже vless reality клиент
@@ -658,6 +705,9 @@ aur_pkgs=(
     #в целом конечно аур пакеты использовать надо очень осторожно это понятно
     #woeusb-ng #типо rufus для прошивки флешек (только iso винды)
 )
+
+aur_pkgs=("${aur_desktop[@]}")
+is_full && aur_pkgs+=("${aur_network[@]}")
 
 for pkg in "${aur_pkgs[@]}"; do
     if ! yay -Q "$pkg" &>/dev/null; then
@@ -672,29 +722,37 @@ for pkg in "${aur_pkgs[@]}"; do
 done
 
 # ─────────────────────────────────────────────
-# 🧰 VirtualBox support
+# 🧰 VirtualBox support (профиль full)
 
-vbox_pkgs=(
-    virtualbox
-    virtualbox-host-dkms
-    dkms
-    linux-headers
-    virtualbox-guest-iso
-)
+setup_virtualbox() {
+    local vbox_pkgs=(
+        virtualbox
+        virtualbox-host-dkms
+        dkms
+        linux-headers
+        virtualbox-guest-iso
+    )
 
-echo -e "${CYAN}📦 Installing VirtualBox and modules...${RESET}"
-# было: второй явный for-цикл; стало: тот же хелпер
-install_list "${vbox_pkgs[@]}"
+    echo -e "${CYAN}📦 Installing VirtualBox and modules...${RESET}"
+    # было: второй явный for-цикл; стало: тот же хелпер
+    install_list "${vbox_pkgs[@]}"
 
-if ! lsmod | grep -q '^vboxdrv'; then
-    echo -e "${CYAN}📦 Loading vboxdrv module...${RESET}"
-    sudo modprobe vboxdrv || echo -e "${YELLOW}⚠️ Не удалось загрузить vboxdrv — возможно, нужно перезагрузить систему${RESET}"
+    if ! lsmod | grep -q '^vboxdrv'; then
+        echo -e "${CYAN}📦 Loading vboxdrv module...${RESET}"
+        sudo modprobe vboxdrv || echo -e "${YELLOW}⚠️ Не удалось загрузить vboxdrv — возможно, нужно перезагрузить систему${RESET}"
+    else
+        echo -e "${GREEN}✅ vboxdrv already loaded${RESET}"
+    fi
+
+    echo -e "${CYAN}👤 Добавляем пользователя в группу vboxusers...${RESET}"
+    sudo usermod -aG vboxusers "$USER"
+}
+
+if is_full; then
+    setup_virtualbox
 else
-    echo -e "${GREEN}✅ vboxdrv already loaded${RESET}"
+    echo -e "${GREEN}✅ VirtualBox пропущен (профиль lite)${RESET}"
 fi
-
-echo -e "${CYAN}👤 Добавляем пользователя в группу vboxusers...${RESET}"
-sudo usermod -aG vboxusers "$USER"
 
 # ─────────────────────────────────────────────
 # 🔗 Симлинки
@@ -839,19 +897,21 @@ awk '
 ' "$FLAMESHOT_INI" > "$FLAMESHOT_INI.tmp" && mv "$FLAMESHOT_INI.tmp" "$FLAMESHOT_INI"
 echo -e "${GREEN}✅ Flameshot X11 legacy screenshot backend enabled${RESET}"
 
-# 🟣 Discord Proxy
-echo -e "${CYAN}🔧 Linking Discord Proxy...${RESET}"
+# 🟣 Discord Proxy (Discord ставится только в профиле full)
+if is_full; then
+    echo -e "${CYAN}🔧 Linking Discord Proxy...${RESET}"
 
-mkdir -p ~/.local/bin
-ln -sf ~/dotfiles/discord/discord-proxy.sh ~/.local/bin/discord-proxy
+    mkdir -p ~/.local/bin
+    ln -sf ~/dotfiles/discord/discord-proxy.sh ~/.local/bin/discord-proxy
 
-mkdir -p ~/.local/share/applications
-ln -sf ~/dotfiles/discord/discord-proxy.desktop ~/.local/share/applications/discord-proxy.desktop
+    mkdir -p ~/.local/share/applications
+    ln -sf ~/dotfiles/discord/discord-proxy.desktop ~/.local/share/applications/discord-proxy.desktop
 
-# опционально, чтобы меню обновилось
-update-desktop-database ~/.local/share/applications 2>/dev/null || true
+    # опционально, чтобы меню обновилось
+    update-desktop-database ~/.local/share/applications 2>/dev/null || true
 
-echo -e "${GREEN}✅ Discord Proxy linked${RESET}"
+    echo -e "${GREEN}✅ Discord Proxy linked${RESET}"
+fi
 
 
 echo -e "${GREEN}✅ All symlinks created${RESET}"
@@ -914,8 +974,15 @@ else
     echo -e "${GREEN}✅ Локали уже настроены${RESET}"
 fi
 
-echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf > /dev/null
-echo 'KEYMAP=us' | sudo tee /etc/vconsole.conf > /dev/null
+# Системную локаль и раскладку консоли задаём только если они ещё не заданы —
+# уже выбранный при установке системы язык (например ru_RU) не перетираем.
+if ! grep -q '^LANG=' /etc/locale.conf 2>/dev/null; then
+    echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf > /dev/null
+fi
+if ! grep -q '^KEYMAP=' /etc/vconsole.conf 2>/dev/null; then
+    echo 'KEYMAP=us' | sudo tee /etc/vconsole.conf > /dev/null
+fi
+echo -e "${GREEN}✅ Системная локаль: $(grep '^LANG=' /etc/locale.conf | cut -d= -f2)${RESET}"
 
 
 # Активируем службы systemd для звука (после установки пакетов)
@@ -1154,9 +1221,11 @@ setup_power_management
 source ~/dotfiles/scripts/hardware_config.sh
 configure_hardware
 
-# ─── 🎮 Steam & GPU launcher setup ───
-source ~/dotfiles/scripts/steam_setup.sh
-setup_steam
+# ─── 🎮 Steam & GPU launcher setup (профиль full) ───
+if is_full; then
+    source ~/dotfiles/scripts/steam_setup.sh
+    setup_steam
+fi
 
 # ─── Media-aware idle inhibit (prevents screen blanking during playback) ───
 source ~/dotfiles/scripts/idle_inhibit.sh

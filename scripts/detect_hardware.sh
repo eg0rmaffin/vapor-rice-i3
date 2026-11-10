@@ -8,6 +8,8 @@ YELLOW="\033[1;33m"
 CYAN="\033[0;36m"
 RESET="\033[0m"
 
+source "$(dirname "${BASH_SOURCE[0]}")/gpu_lib.sh"
+
 # Функция для определения наличия пакета
 check_package() {
     pacman -Q "$1" &>/dev/null
@@ -89,8 +91,14 @@ install_gpu_drivers() {
 
     # AMD GPU
     if lspci | grep -i 'vga\|3d\|display' | grep -i 'amd\|ati\|radeon' &>/dev/null; then
-        echo -e "${CYAN}🔍 Найдена AMD GPU${RESET}"
-        for pkg in xf86-video-amdgpu mesa vulkan-radeon libva-mesa-driver; do
+        local amd_pkgs=(xf86-video-amdgpu mesa vulkan-radeon libva-mesa-driver)
+        if amd_gpu_is_legacy; then
+            echo -e "${CYAN}🔍 Найдена старая AMD/ATI GPU (драйвер ядра radeon)${RESET}"
+            amd_pkgs=(xf86-video-ati mesa)
+        else
+            echo -e "${CYAN}🔍 Найдена AMD GPU${RESET}"
+        fi
+        for pkg in "${amd_pkgs[@]}"; do
             if ! check_package "$pkg"; then
                 install_package "$pkg"
             else

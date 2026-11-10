@@ -6,8 +6,9 @@ fi
 
 export GTK_THEME=catppuccin-mocha-mauve-standard+default
 export GTK_ICON_THEME=Chicago95
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
+# Язык сессии — системная локаль (/etc/locale.conf, её выставляет login-шелл).
+# Навязываем en_US только если локаль вообще не задана.
+export LANG="${LANG:-en_US.UTF-8}"
 
 # ─── XDG desktop context ───
 export XDG_SESSION_TYPE=x11
