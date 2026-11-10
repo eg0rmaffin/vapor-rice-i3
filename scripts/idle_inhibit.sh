@@ -272,7 +272,7 @@ status_idle_inhibit() {
     # Audio status
     echo "Audio Playing:"
     if command -v pactl &>/dev/null; then
-        local playing=$(pactl list sink-inputs 2>/dev/null | grep -c "State: RUNNING")
+        local playing=$(LC_ALL=C pactl list sink-inputs 2>/dev/null | grep -c "State: RUNNING")
         if [ "$playing" -gt 0 ]; then
             echo -e "  ${GREEN}Yes ($playing audio stream(s) active)${RESET}"
             echo "  -> xidlehook will NOT trigger idle actions"

@@ -305,11 +305,24 @@ install_list() {
     # This pattern preserves global fail-fast semantics while making
     # install_list() an explicit error-capture boundary.
     # ─────────────────────────────────────────────────────────────────
-    local install_output install_status
-    set +e
-    install_output=$(sudo pacman -S --needed --noconfirm "${pkgs[@]}" 2>&1)
-    install_status=$?
-    set -e
+    # pacman runs with LC_ALL=C so the error checks below match on any system
+    # locale (they look for English messages like "target not found").
+    local install_output install_status attempt
+    for attempt in 1 2 3; do
+        set +e
+        install_output=$(sudo env LC_ALL=C pacman -S --needed --noconfirm "${pkgs[@]}" 2>&1)
+        install_status=$?
+        set -e
+
+        # Download failure (slow link / stalled mirror): retry — files already
+        # downloaded stay in the pacman cache, so a retry only fetches the rest.
+        if [ $install_status -ne 0 ] && [ $attempt -lt 3 ] && \
+           echo "$install_output" | grep -qE "failed retrieving file|failed to retrieve some files"; then
+            echo -e "${YELLOW}⚠️  Download failed (attempt $attempt/3), retrying...${RESET}"
+            continue
+        fi
+        break
+    done
 
     if [ $install_status -eq 0 ]; then
         echo -e "${GREEN}✅ Packages installed${RESET}"
