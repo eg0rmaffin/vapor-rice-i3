@@ -157,7 +157,7 @@ if command -v pactl &>/dev/null; then
 
     for sink_name in "${alsa_sinks[@]}"; do
         vol=$(pactl get-sink-volume "$sink_name" 2>/dev/null | grep -o '[0-9]*%' | head -1)
-        mute=$(pactl get-sink-mute "$sink_name" 2>/dev/null | grep -o 'yes\|no')
+        mute=$(LC_ALL=C pactl get-sink-mute "$sink_name" 2>/dev/null | grep -o 'yes\|no')
         if [ "$vol" = "100%" ] && [ "$mute" = "no" ]; then
             check "$sink_name at $vol (mute=$mute)" "true"
         else

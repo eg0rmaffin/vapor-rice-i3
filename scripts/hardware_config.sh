@@ -7,6 +7,8 @@ YELLOW="\033[1;33m"
 CYAN="\033[0;36m"
 RESET="\033[0m"
 
+source "$(dirname "${BASH_SOURCE[0]}")/gpu_lib.sh"
+
 detect_hybrid_graphics() {
     # Определяем наличие гибридной графики
     local intel_gpu=$(lspci | grep -i 'vga\|3d\|display' | grep -i 'intel')
@@ -63,7 +65,14 @@ EOF
     # AMD GPU (только если нет гибридной графики)
     if lspci | grep -i 'vga\|3d\|display' | grep -i 'amd\|ati\|radeon' &>/dev/null; then
         AMD_CONF="$XORG_CONF_DIR/20-amdgpu.conf"
-        if [ ! -f "$AMD_CONF" ]; then
+        if amd_gpu_is_legacy; then
+            # radeon: Xorg сам выберет ati/modesetting; конфиг с Driver "amdgpu" даёт чёрный экран
+            if [ -f "$AMD_CONF" ]; then
+                sudo rm "$AMD_CONF"
+                echo -e "${YELLOW}⚠️ Удалён $AMD_CONF — эта GPU работает на драйвере radeon, не amdgpu${RESET}"
+            fi
+            echo -e "${GREEN}✅ Старая AMD/ATI GPU: отдельный Xorg-конфиг не нужен${RESET}"
+        elif [ ! -f "$AMD_CONF" ]; then
             echo -e "${CYAN}🔧 Создаем конфигурацию для AMD GPU...${RESET}"
             sudo tee "$AMD_CONF" > /dev/null <<EOF
 Section "Device"
